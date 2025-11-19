@@ -3,11 +3,25 @@ body {
     color: var(--foreground);
     font-family: 'Fira Code', 'Roboto Mono', monospace;
     margin: 0;
+    height: 100%;
     padding: 0;
     height: 100vh;
     overflow: hidden;
     font-size: 16px;
     line-height: 1.5;
+}
+
+
+/* Fuerza al contenedor del editor a ocupar el 100% */
+#editor-container {
+    height: 100%;
+}
+
+/* FUERZA LA ALTURA AL DIV QUE CREA CODEMIRROR */
+/* El editor de CodeMirror se inicializa dentro de #editor-container */
+#editor-container .CodeMirror {
+    height: 100%; /* ¡Esta es la clave! */
+    font-size: 16px; /* Opcional: ajusta la fuente para mejor legibilidad */
 }
 
 #terminal {
