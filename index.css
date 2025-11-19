@@ -1,191 +1,180 @@
-/* Base Styles */
-* {
+body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: 'Fira Code', 'Roboto Mono', monospace;
     margin: 0;
     padding: 0;
-    box-sizing: border-box;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-}
-
-body {
-    background-color: #f8f9fa;
-    color: #333;
-    line-height: 1.6;
-}
-
-.container {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 0 20px;
-}
-
-/* Layout */
-.portfolio {
-    display: grid;
-    grid-template-columns: 350px 1fr;
-    gap: 40px;
-    padding: 40px 0;
-}
-
-@media (max-width: 768px) {
-    .portfolio {
-        grid-template-columns: 1fr;
-    }
-}
-
-/* Sidebar Styles */
-.sidebar {
-    background: white;
-    border-radius: 10px;
-    padding: 30px;
-    box-shadow: 0 5px 15px rgba(0,0,0,0.05);
-    height: fit-content;
-    position: sticky;
-    top: 20px;
-}
-
-.profile-img {
-    width: 150px;
-    height: 150px;
-    border-radius: 50%;
-    object-fit: cover;
-    margin: 0 auto 20px;
-    display: block;
-    border: 3px solid #e9ecef;
-}
-
-.name {
-    font-size: 1.8rem;
-    margin-bottom: 5px;
-    color: #2c3e50;
-    text-align: center;
-}
-
-.title {
-    color: #6c757d;
-    margin-bottom: 20px;
-    font-weight: 400;
-    text-align: center;
-}
-
-.description {
-    margin-bottom: 25px;
-    color: #495057;
-}
-
-.section-title {
-    font-size: 1.2rem;
-    margin: 25px 0 15px;
-    padding-bottom: 8px;
-    border-bottom: 2px solid #e9ecef;
-    color: #2c3e50;
-}
-
-.tech-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 10px;
-}
-
-.tech-tag {
-    background: #e9ecef;
-    padding: 5px 12px;
-    border-radius: 20px;
-    font-size: 0.85rem;
-    color: #495057;
-}
-
-.contact-info p {
-    margin-bottom: 8px;
-    color: #495057;
-}
-
-/* Main Content Styles */
-.main-content {
-    background: white;
-    border-radius: 10px;
-    padding: 30px;
-    box-shadow: 0 5px 15px rgba(0,0,0,0.05);
-}
-
-.content-section {
-    margin-bottom: 40px;
-}
-
-.content-section h2 {
-    font-size: 1.8rem;
-    margin-bottom: 20px;
-    color: #2c3e50;
-    padding-bottom: 10px;
-    border-bottom: 2px solid #e9ecef;
-}
-
-.project-item {
-    padding: 20px;
-    border-radius: 8px;
-    background: #f8f9fa;
-    margin-bottom: 20px;
-}
-
-.project-title {
-    font-size: 1.3rem;
-    margin-bottom: 8px;
-    color: #2c3e50;
-}
-
-.project-description {
-    color: #6c757d;
-    margin-bottom: 12px;
-}
-
-.project-link {
-    color: #3498db;
-    text-decoration: none;
-    font-weight: 500;
-}
-
-.project-link:hover {
-    text-decoration: underline;
-}
-
-.game-card {
-    background: #f8f9fa;
-    border-radius: 8px;
+    height: 100vh;
     overflow: hidden;
+    font-size: 16px;
+    line-height: 1.5;
 }
 
-.game-image {
-    width: 100%;
-    height: 200px;
-    background-color: #e9ecef;
-}
-
-.game-image img {
-    width: 100%;
+#terminal {
+    padding: 20px;
     height: 100%;
-    object-fit: cover;
+    box-sizing: border-box;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
 }
 
-.game-info {
-    padding: 15px;
+/* Custom Scrollbar */
+#terminal::-webkit-scrollbar {
+    width: 10px;
 }
 
-.game-title {
-    font-size: 1.1rem;
-    margin-bottom: 8px;
-    color: #2c3e50;
+#terminal::-webkit-scrollbar-track {
+    background: var(--background);
 }
 
-.game-description {
-    color: #6c757d;
-    font-size: 0.9rem;
+#terminal::-webkit-scrollbar-thumb {
+    background: var(--bright-black);
+    border-radius: 5px;
 }
 
-/* Footer */
-footer {
-    text-align: center;
-    padding: 30px 0;
-    color: #6c757d;
-    border-top: 1px solid #e9ecef;
-    margin-top: 40px;
+#output {
+    flex-grow: 0;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.command-line {
+    margin-bottom: 5px;
+    display: flex;
+    align-items: center;
+    white-space: nowrap;
+}
+
+.output-line {
+    margin-bottom: 10px;
+    color: var(--foreground);
+}
+
+/* Prompt Styling */
+.user {
+    color: var(--blue);
+    font-weight: bold;
+}
+
+.at {
+    color: var(--foreground);
+}
+
+.host {
+    color: var(--magenta);
+    font-weight: bold;
+}
+
+.colon {
+    color: var(--foreground);
+}
+
+.path {
+    color: var(--cyan);
+    font-weight: bold;
+}
+
+.dollar {
+    color: var(--foreground);
+    margin-right: 8px;
+}
+
+/* Input Styling */
+#input-line {
+    display: flex;
+    align-items: center;
+    width: 100%;
+}
+
+#command-input {
+    background: transparent;
+    border: none;
+    color: var(--foreground);
+    font-family: inherit;
+    font-size: inherit;
+    flex-grow: 1;
+    outline: none;
+    padding: 0;
+    margin: 0;
+    caret-color: var(--cursor-color);
+}
+
+/* Markdown Styling within Output */
+.md-h1 {
+    color: var(--red);
+    font-weight: bold;
+    font-size: 1.5em;
+    margin-top: 1em;
+    margin-bottom: 0.5em;
+}
+
+.md-h2 {
+    color: var(--yellow);
+    font-weight: bold;
+    font-size: 1.2em;
+    margin-top: 1em;
+    margin-bottom: 0.5em;
+}
+
+.md-h3 {
+    color: var(--green);
+    font-weight: bold;
+    margin-top: 1em;
+    margin-bottom: 0.5em;
+}
+
+.md-link {
+    color: var(--link-color);
+    text-decoration: none;
+    border-bottom: 1px dashed var(--link-color);
+}
+
+.md-link:hover {
+    border-bottom-style: solid;
+}
+
+.md-code {
+    background: var(--black);
+    padding: 2px 5px;
+    border-radius: 3px;
+    color: var(--cyan);
+}
+
+.md-block-code {
+    background: var(--black);
+    padding: 10px;
+    border-radius: 5px;
+    color: var(--foreground);
+    display: block;
+    white-space: pre;
+    overflow-x: auto;
+    margin: 10px 0;
+}
+
+.md-list-item {
+    margin-left: 20px;
+}
+
+.md-strong {
+    font-weight: bold;
+    color: var(--bright-white);
+}
+
+.md-em {
+    font-style: italic;
+    color: var(--bright-yellow);
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 600px) {
+    body {
+        font-size: 14px;
+    }
+
+    #terminal {
+        padding: 10px;
+    }
+
+    /* Hide host on very small screens if needed, but keeping for now */
 }

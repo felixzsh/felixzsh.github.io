@@ -4,75 +4,27 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Félix Sánchez - Portfolio</title>
+  <title>felixzsh@portfolio: ~</title>
+  <link rel="stylesheet" href="themes/tokyo-night.css">
   <link rel="stylesheet" href="index.css">
+  <!-- Preload fonts if we decide to use a web font, for now system monospace is fine -->
 </head>
 
 <body>
-  <div class="container">
-    <div class="portfolio">
-      <!-- Sidebar -->
-      <div class="sidebar">
-        <img src="images/profile.jpg" alt="Félix Sánchez" class="profile-img">
-        <h1 class="name">Félix Sánchez</h1>
-        <p class="title">Software Developer</p>
-        <p class="description">Passionate developer</p>
-
-        <h3 class="section-title">Technologies</h3>
-        <div class="tech-list">
-          <span class="tech-tag">Python</span>
-          <span class="tech-tag">Typescript</span>
-          <span class="tech-tag">C#</span>
-          <span class="tech-tag">Rust</span>
-        </div>
-
-        <h3 class="section-title">Contact</h3>
-        <div class="contact-info">
-          <p>felix.sanchez.dev@gmail.com</p>
-          <p>GitHub: felixzsh</p>
-        </div>
-      </div>
-
-      <!-- Main Content -->
-      <div class="main-content">
-        <!-- Projects Section -->
-        <section class="content-section">
-          <h2>Projects</h2>
-          <div class="project-item">
-            <h3 class="project-title">WWeb Botforge</h3>
-            <p class="project-description">No-Code whatsapp web bot automation framework</p>
-            <a href="https://github.com/felixzsh/wweb-botforge" class="project-link" target="_blank">View on GitHub</a>
-          </div>
-          <div class="project-item">
-            <h3 class="project-title">aw-nextblock</h3>
-            <p class="project-description">flexible timeblocking tool for activity watch</p>
-            <a href="https://github.com/felixzsh/aw-nextblock" class="project-link" target="_blank">View on GitHub</a>
-          </div>
-          <!-- Duplicate this project-item for more projects -->
-        </section>
-
-        <!-- Games Section -->
-        <section class="content-section">
-          <h2>Games</h2>
-          <div class="game-card">
-            <div class="game-image">
-              <img src="images/dungeon-firstborn.png" alt="Game Name">
-            </div>
-            <div class="game-info">
-              <h3 class="game-title">Dungeon Firstborn</h3>
-              <p class="game-description">Dungeon crawler made for #dcj2021.</p>
-              <a href="https://fezro.itch.io/dungeon-firstborn" class="project-link" target="_blank">View on Itch.io</a>
-            </div>
-          </div>
-          <!-- Duplicate this game-card for more games -->
-        </section>
-      </div>
+  <div id="terminal">
+    <div id="output"></div>
+    <div id="input-line">
+      <span id="prompt">
+        <span class="user">felixzsh</span><span class="at">@</span><span class="host">portfolio</span><span
+          class="colon">:</span><span class="path">~</span><span class="dollar">$</span>
+      </span>
+      <input type="text" id="command-input" autocomplete="off" spellcheck="false" autofocus>
     </div>
-
-    <footer>
-      <p>&copy; 2025 Félix Sánchez</p>
-    </footer>
   </div>
+
+  <script src="js/filesystem.js"></script>
+  <script src="js/commands.js"></script>
+  <script src="js/main.js"></script>
 </body>
 
 </html>
