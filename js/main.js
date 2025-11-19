@@ -20,9 +20,11 @@ class Terminal {
     }
 
     init() {
+        // Initialize terminal event listeners and components
         this.input.addEventListener('keydown', (e) => this.handleInput(e));
-        document.addEventListener('click', () => {
-            if (this.isVimActive) {
+        document.addEventListener('click', (e) => {
+            // Only focus if the editor is not active and the click is not inside the editor container
+            if (!this.isEditorActive && !this.editorContainer.contains(e.target)) {
                 this.input.focus();
             }
         });
