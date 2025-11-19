@@ -7,7 +7,11 @@
   <title>felixzsh@portfolio: ~</title>
   <link rel="stylesheet" href="themes/tokyo-night.css">
   <link rel="stylesheet" href="index.css">
-  <!-- Preload fonts if we decide to use a web font, for now system monospace is fine -->
+  <link rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/theme/tomorrow-night-eighties.min.css"
+    integrity="sha512-aTRY/QIrMwrbWg/XXBy6jfUsSnOBons3re69HeEfdUpoKVdx2qmxrIDSsXaQZhmdllZ0rhICUxojIiJyDxRqdg=="
+    crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/codemirror.min.css">
 </head>
 
 <body>
@@ -22,14 +26,22 @@
     </div>
   </div>
 
-
-  <div id="vim-container"
-    style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 100; background: black;">
-    <div id="vim-screen" style="width: 100%; height: 100%;"></div>
+  <div id="editor-container" style="display: none; 
+           position: fixed; 
+           top: 0; 
+           left: 0; 
+           width: 100%; 
+           height: 100%; 
+           z-index: 100; 
+           background: black;">
   </div>
 
   <script src="js/filesystem.js"></script>
-  <script src="node_modules/vim-wasm/vim.js"></script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/codemirror.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/keymap/vim.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/mode/markdown/markdown.min.js"></script>
+
   <script src="js/main.js"></script>
 </body>
 
