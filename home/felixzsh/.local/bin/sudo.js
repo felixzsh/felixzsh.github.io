@@ -1,6 +1,6 @@
 return {
-    description: 'Execute a command as another user',
-    execute: (args, term) => {
-        return `<span style="color: var(--red);">felixzsh is not in the sudoers file. This incident will be reported.</span> 😈`;
-    }
+  description: 'Execute a command as super user',
+  execute: (args, term) => {
+    return `<span style="color: var(--red);">You are not supposed to do this. This incident will be reported.</span>`;
+  }
 };
