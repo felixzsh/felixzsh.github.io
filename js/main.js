@@ -7,6 +7,12 @@ class Terminal {
         this.history = [];
         this.historyIndex = -1;
 
+        this.aliases = {
+            'aboutme': 'whoami',
+            'intro': 'whoami',
+            'cls': 'clear'
+        };
+
         this.init();
     }
 
@@ -75,7 +81,7 @@ Type <span class="md-code">help</span> to see available commands.
         // Case 1: Command Completion (First part)
         if (parts.length === 1 && !isNewArg) {
             const prefix = parts[0];
-            const allCommands = Object.keys(commands);
+            const allCommands = this.getAvailableCommands();
             const matches = allCommands.filter(cmd => cmd.startsWith(prefix));
 
             if (matches.length === 0) return;
@@ -181,8 +187,8 @@ Type <span class="md-code">help</span> to see available commands.
         });
 
         // Check aliases
-        if (aliases[cmdName]) {
-            const aliasExpansion = aliases[cmdName].split(' ');
+        if (this.aliases[cmdName]) {
+            const aliasExpansion = this.aliases[cmdName].split(' ');
             cmdName = aliasExpansion[0];
             // Prepend alias args to the parsed args
             // Note: This is a simple alias implementation. 
@@ -192,12 +198,12 @@ Type <span class="md-code">help</span> to see available commands.
             args.unshift(...aliasArgs);
         }
 
-        const cmd = commands[cmdName];
+        const cmdDef = this.loadCommand(cmdName);
 
-        if (cmd) {
+        if (cmdDef) {
             try {
                 // Pass options as the third argument
-                const result = cmd.fn(args, this, options);
+                const result = cmdDef.execute(args, this, options);
                 if (result) {
                     this.print(result);
                 }
@@ -210,6 +216,39 @@ Type <span class="md-code">help</span> to see available commands.
 
         // Scroll to bottom
         this.scrollToBottom();
+    }
+
+    getAvailableCommands() {
+        const binPath = ['home', 'felixzsh', '.local', 'bin'];
+        const binNode = getNode(binPath);
+        if (!binNode || !binNode.children) return [];
+
+        return Object.keys(binNode.children)
+            .filter(f => f.endsWith('.js'))
+            .map(f => f.replace('.js', ''));
+    }
+
+    loadCommand(name) {
+        const binPath = ['home', 'felixzsh', '.local', 'bin'];
+        const binNode = getNode(binPath);
+        if (!binNode || !binNode.children) return null;
+
+        const filename = name + '.js';
+        if (binNode.children[filename]) {
+            const content = binNode.children[filename].content;
+            try {
+                const cmdFactory = new Function('context', content);
+                return cmdFactory({
+                    term: this,
+                    args: [],
+                    options: {}
+                });
+            } catch (e) {
+                console.error(`Error loading command ${name}:`, e);
+                return null;
+            }
+        }
+        return null;
     }
 
     printPromptLine(command) {
