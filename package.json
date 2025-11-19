@@ -1,0 +1,9 @@
+{
+    "scripts": {
+        "dev": "node scripts/generate-fs-json.js && http-server -p 8000",
+        "build": "node scripts/generate-fs-json.js"
+    },
+    "dependencies": {
+        "vim-wasm": "^0.0.13"
+    }
+}
