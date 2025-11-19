@@ -5,7 +5,10 @@ class Terminal {
         this.promptPath = document.querySelector('.path');
         this.currentPath = '/home/felixzsh';
         this.history = [];
-        this.historyIndex = -1;
+        this.vimContainer = document.getElementById('vim-container');
+        this.vimCanvas = document.getElementById('vim-canvas');
+        this.isVimActive = false;
+        this.currentVimFilePath = null;
 
         this.aliases = {
             'aboutme': 'whoami',
@@ -18,9 +21,61 @@ class Terminal {
 
     init() {
         this.input.addEventListener('keydown', (e) => this.handleInput(e));
-        document.addEventListener('click', () => this.input.focus());
+        document.addEventListener('click', () => {
+            if (this.isVimActive) {
+                this.input.focus();
+            }
+        });
         this.updatePrompt();
         this.printWelcome();
+    }
+
+
+    toggleVim(activate, filePath = null) {
+        this.isVimActive = activate;
+        this.currentVimFilePath = filePath;
+
+        if (activate) {
+            this.vimContainer.style.display = 'block';
+            document.getElementById('terminal').style.opacity = '0';
+            this.input.blur();
+        } else {
+
+            document.getElementById('terminal').style.opacity = '1';
+            this.vimContainer.style.display = 'none';
+            this.input.focus();
+            this.scrollToBottom();
+
+
+            this.saveVimContent();
+        }
+    }
+
+
+    saveVimContent() {
+        if (!this.currentVimFilePath) return;
+
+        const emscriptenPath = this.currentVimFilePath;
+
+        try {
+            const data = window.Vim.FS.readFile(emscriptenPath, { encoding: 'utf8' });
+
+            const pathParts = resolvePath('/', this.currentVimFilePath);
+            const node = getNode(pathParts);
+
+            if (node && node.type === 'file') {
+                node.content = data;
+                saveFS();
+                this.print(`<span style="color: var(--green)">${this.currentVimFilePath} guardado.</span>`);
+            } else {
+                this.print(`<span style="color: var(--red)">Error: Archivo no encontrado después de editar.</span>`);
+            }
+
+        } catch (e) {
+            this.print(`<span style="color: var(--red)">Error al leer el archivo desde VIM: ${e.message}</span>`);
+        }
+
+        this.currentVimFilePath = null;
     }
 
     updatePrompt() {
@@ -303,7 +358,46 @@ Type <span class="md-code">help</span> to see available commands.
     }
 }
 
-// Initialize
+window.Vim = {
+    canvas: document.getElementById('vim-canvas'),
+
+
+    locateFile: (path, prefix) => {
+        return `node_modules/vim-wasm/${path}`;
+    },
+
+    onExit: () => {
+        if (window.terminal) {
+            window.terminal.toggleVim(false);
+        }
+    }
+};
+
+window.startVim = (filePath, fileContent) => {
+    if (window.Vim.FS) {
+    }
+
+    try {
+        const pathParts = filePath.split('/');
+        let currentPath = '';
+        for (let i = 1; i < pathParts.length - 1; i++) {
+            currentPath += '/' + pathParts[i];
+            try {
+                window.Vim.FS.mkdir(currentPath);
+            } catch (e) { }
+        }
+
+        window.Vim.FS.writeFile(filePath, fileContent, { encoding: 'utf8' });
+    } catch (e) {
+        console.error("Error escribiendo archivo inicial a Emscripten FS:", e);
+        window.terminal.print(`<span style="color: var(--red)">Error al preparar el editor.</span>`);
+        window.terminal.toggleVim(false);
+        return;
+    }
+
+    window.Vim.start(['-c', `e ${filePath}`]);
+};
+
 window.addEventListener('DOMContentLoaded', () => {
     window.terminal = new Terminal();
 });
