@@ -46,7 +46,7 @@ function execute(args, term, options) {
   const editor = CodeMirror(editorContainer, {
     value: initialContent,
     mode: "markdown",
-    theme: "tomorrow-night-eighties",
+    theme: "dracula",
     keyMap: "vim",
     lineNumbers: true,
     autofocus: true
