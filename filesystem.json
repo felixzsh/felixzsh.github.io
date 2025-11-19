@@ -1,0 +1,46 @@
+{
+    "home": {
+        "type": "directory",
+        "children": {
+            "felixzsh": {
+                "type": "directory",
+                "children": {
+                    ".secrets": {
+                        "type": "file",
+                        "content": "You found the hidden file! 🕵️‍♂️\n"
+                    },
+                    "about.md": {
+                        "type": "file",
+                        "content": "# About Me\n\nHi, I'm **Felix Sanchez** (felixzsh).\n\nI am a passionate developer who loves **Linux**, **Open Source**, and building cool things.\n\nWelcome to my terminal portfolio! Feel free to explore.\n\nType `help` to see available commands.\n"
+                    },
+                    "contact.md": {
+                        "type": "file",
+                        "content": "# Contact Me\n\n- **GitHub**: [github.com/felixzsh](https://github.com/felixzsh)\n- **Email**: felix@example.com\n- **Twitter**: @felixzsh\n"
+                    },
+                    "projects": {
+                        "type": "directory",
+                        "children": {
+                            "demos": {
+                                "type": "directory",
+                                "children": {
+                                    "hello.py": {
+                                        "type": "file",
+                                        "content": "print('Hello, World!')\n"
+                                    }
+                                }
+                            },
+                            "portfolio.md": {
+                                "type": "file",
+                                "content": "# Terminal Portfolio\n\nThis very website! Built with HTML, CSS, and JS to simulate a Linux terminal.\n\nFeatures:\n- Virtual Filesystem\n- Command History\n- Tokyo Night Theme\n- Easter Eggs\n"
+                            }
+                        }
+                    },
+                    "skills.md": {
+                        "type": "file",
+                        "content": "# Skills\n\n- **Languages**: JavaScript, Python, Rust, Go\n- **Tools**: Git, Docker, Kubernetes, Linux\n- **Frontend**: React, Vue, Svelte\n"
+                    }
+                }
+            }
+        }
+    }
+}
