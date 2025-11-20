@@ -69,8 +69,17 @@ class Terminal {
 
   printWelcome() {
     const welcomeMsg = `
-<span style="color: var(--green)">Welcome to Felix's Terminal Portfolio v1.0.0</span>
-Type <span class="md-code">help</span> to see available commands.
+<pre class="whitespace-pre-wrap mb-4">
+<span style="color: var(--blue)">
+            ┌───────────────────────────────────────────┐
+            │          F E L I X   S A N C H E Z        │
+            │              P O R T F O L I O            │
+            └───────────────────────────────────────────┘
+</span>
+            <span style="color: var(--green)">Type <span class="md-code">help</span> to see available commands.</span>
+            <span style="color: var(--green)">Press <span class="md-code">Ctrl+Shift+R</span> to reset the virtual filesystem.</span>
+            <span style="color: var(--blue)">───────────────────────────────────────────</span>
+</pre>
 `;
     this.print(welcomeMsg);
   }
