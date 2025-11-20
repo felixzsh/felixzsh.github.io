@@ -2,7 +2,7 @@ return {
   description: "evolution of the unix vi editor",
   execute: (args, term, options) => {
     if (args.length === 0 || options.help) {
-      return "Use: vim &lt;file&gt;\n\nEdits a file in the virtual filesystem.";
+      return "Use: vim &lt;file_name&gt;\n\nEdits a file in the virtual filesystem.";
     }
 
     const rawPath = args[0];

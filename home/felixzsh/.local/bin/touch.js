@@ -2,7 +2,8 @@ return {
   description: "Makes an empty file",
   execute: (args, term, options) => {
     if (args.length === 0 || options.help) {
-      return "Usage: touch <file_name>\n\nCreate a new file or update timestamp (simple implementation).";
+      //TODO: fix filename render
+      return "Usage: touch &lt;file_name&gt;\n\nCreate a new file or update timestamp (simple implementation).";
     }
 
     const filePath = args[0];

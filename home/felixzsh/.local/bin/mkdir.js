@@ -2,7 +2,7 @@ return {
   description: "Makes an empty directory",
   execute: (args, term, options) => {
     if (args.length === 0 || options.help) {
-      return "Usage: mkdir <directory_name>\n\nCreate new directory.";
+      return "Usage: mkdir &lt;directory_name&gt;\n\nCreate new directory.";
     }
 
     const newDirPath = args[0];
