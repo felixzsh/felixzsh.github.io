@@ -89,3 +89,10 @@ function getNode(pathParts) {
   }
   return current;
 }
+
+document.addEventListener('keydown', (e) => {
+  if (e.shiftKey && e.key === 'R' && (e.ctrlKey || e.metaKey)) {
+      localStorage.removeItem(LOCAL_STORAGE_KEY);
+      window.location.reload();
+  }
+});
