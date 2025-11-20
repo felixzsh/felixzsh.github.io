@@ -2,7 +2,7 @@ return {
   description: "evolution of the unix vi editor",
   execute: (args, term, options) => {
     if (args.length === 0 || options.help) {
-      return "Use: vim <archivo>\n\nEdits a file in the virtual filesystem.";
+      return "Use: vim &lt;file&gt;\n\nEdits a file in the virtual filesystem.";
     }
 
     const rawPath = args[0];
@@ -32,7 +32,6 @@ return {
 
       fileNode = { "type": "file", "content": "" };
       isNewFile = true;
-      term.print(`<span style="color: var(--yellow)">"${rawPath}" [New File]</span>`);
     }
 
     term.toggleEditor(true, fileNode, absPath);
