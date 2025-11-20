@@ -1,5 +1,5 @@
 # Contact Me
 
 - **GitHub**: [github.com/felixzsh](https://github.com/felixzsh)
-- **Email**: felix@example.com
+- **Email**: felix.sanchez.dev@gmail.com
 - **Twitter**: @felixzsh
