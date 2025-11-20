@@ -13,4 +13,4 @@ Dungeon Firstborn is a turn-based dungeon crawler game developed for a game jam,
 
 *   [Gameplay Screenshot Placeholder]
 
-For more details, visit the itch.io page: [Link to itch.io page] (Please provide the actual link to your itch.io page for Dungeon Firstborn)
+For more details, visit the itch.io page: [Link to itch.io](https://fezro.itch.io/dungeon-firstborn)
