@@ -1,6 +1,6 @@
 return {
     description: 'Print working directory',
-    execute: (args, term) => {
-        return term.currentPath;
+    execute: (args, context) => {
+        return context.cwd;
     }
 };

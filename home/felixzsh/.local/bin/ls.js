@@ -1,9 +1,9 @@
 return {
   description: 'List directory contents',
-  execute: (args, term, options = {}) => {
+  execute: (args, context, options = {}) => {
     const target = args[0] || '.';
-    const resolvedParts = resolvePath(term.currentPath, target);
-    const node = getNode(resolvedParts);
+    const resolvedParts = context.fs.resolvePath(context.cwd, target);
+    const node = context.fs.getNode(resolvedParts);
 
     if (!node) {
       return `ls: cannot access '${target}': No such file or directory`;
@@ -29,8 +29,8 @@ return {
           const isDir = child.type === 'directory';
           const perms = isDir ? 'drwxr-xr-x' : '-rw-r--r--';
           const size = isDir ? '-' : (child.content ? child.content.length : 0);
-          const user = 'felixzsh';
-          const date = 'Nov 18 12:00';
+          const user = context.env.USER || 'felixzsh';
+          const date = 'Nov 20 12:00';
 
           const nameHtml = isDir
             ? `<span style="color: var(--blue); font-weight: bold;">${name}/</span>`

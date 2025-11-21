@@ -123,8 +123,8 @@ export class Shell {
                 // Create context for command
                 const context = this.createContext(args, options);
 
-                // Execute command with legacy signature
-                const result = cmdDef.execute(args, context.term, options);
+                // Execute command with new context signature
+                const result = cmdDef.execute(args, context, options);
 
                 if (result) {
                     this.tty.print(result);
@@ -156,13 +156,12 @@ export class Shell {
             const content = binNode.children[filename].content;
             try {
                 // Create command factory function
+                // The factory doesn't need context, it just returns the command definition
                 const cmdFactory = new Function('context', content);
 
-                // Create initial context
-                const context = this.createContext([], {});
-
                 // Execute factory to get command definition
-                return cmdFactory(context);
+                // Pass empty object as context parameter (not used by commands)
+                return cmdFactory({});
             } catch (e) {
                 console.error(`Error loading command ${name}:`, e);
                 return null;
@@ -180,29 +179,7 @@ export class Shell {
      */
     createContext(args, options) {
         return {
-            // Legacy compatibility - term object with shell-like interface
-            term: {
-                currentPath: this.currentPath,
-                print: (content) => this.tty.print(content),
-                clear: () => this.tty.clear(),
-                lockInput: () => this.tty.lockInput(),
-                unlockInput: () => this.tty.unlockInput(),
-                renderMarkdown: (text) => this.tty.renderMarkdown(text),
-                updatePrompt: () => this.tty.updatePrompt(this.currentPath),
-
-                // Allow commands to change directory
-                set currentPath(path) {
-                    this.shell.currentPath = path;
-                },
-                get currentPath() {
-                    return this.shell.currentPath;
-                },
-
-                // Reference to shell for advanced commands
-                shell: this
-            },
-
-            // New context properties (for future use)
+            // Core context properties
             shell: this,
             fs: this.fs,
             env: { ...this.env },
@@ -211,7 +188,7 @@ export class Shell {
             options: options,
             rawArgs: [...args],
 
-            // Streams (preparation for future)
+            // Streams
             stdin: null,
             stdout: (data) => this.tty.print(data),
             stderr: (data) => this.tty.print(Formatter.error(data))

@@ -1,8 +1,8 @@
 return {
     description: 'List available commands',
-    execute: (args, term) => {
-        const binPath = ['home', 'felixzsh', '.local', 'bin'];
-        const binNode = getNode(binPath);
+    execute: (args, context) => {
+        const binPath = ['home', context.env.USER || 'felixzsh', '.local', 'bin'];
+        const binNode = context.fs.getNode(binPath);
 
         if (!binNode || !binNode.children) {
             return 'Error: .local/bin not found.';
@@ -19,7 +19,7 @@ return {
 
             try {
                 const cmdFactory = new Function('context', content);
-                const cmdDef = cmdFactory({});
+                const cmdDef = cmdFactory(context);
 
                 if (cmdDef && cmdDef.description) {
                     output += `  <span class="md-strong">${cmdName.padEnd(15)}</span> ${cmdDef.description}\n`;

@@ -5,15 +5,13 @@
 
 import { TTY } from './tty.js';
 import { Shell } from './shell.js';
-import { FileSystem, initGlobalFileSystem } from './filesystem.js';
+import { FileSystem } from './filesystem.js';
 import { Formatter } from './formatter.js';
 
 /**
  * Initialize the terminal application
  */
 function initTerminal() {
-  // Initialize filesystem (also sets up global compatibility layer)
-  const filesystem = initGlobalFileSystem();
 
   // Initialize TTY (terminal interface)
   const tty = new TTY(
@@ -21,6 +19,8 @@ function initTerminal() {
     document.getElementById('command-input'),
     document.querySelector('.path')
   );
+
+  const filesystem = new FileSystem();
 
   // Initialize Shell (command execution engine)
   const shell = new Shell(tty, filesystem);
@@ -37,27 +37,12 @@ function initTerminal() {
   // Print welcome message
   tty.printWelcome();
 
-  // Expose global API for legacy commands and debugging
+  // Expose global API for debugging and console access
   window.terminal = {
     tty,
     shell,
     filesystem,
-    formatter: Formatter,
-
-    // Legacy compatibility interface
-    get currentPath() {
-      return shell.currentPath;
-    },
-    set currentPath(path) {
-      shell.currentPath = path;
-    },
-
-    lockInput: () => tty.lockInput(),
-    unlockInput: () => tty.unlockInput(),
-    print: (content) => tty.print(content),
-    clear: () => tty.clear(),
-    updatePrompt: () => tty.updatePrompt(shell.currentPath),
-    renderMarkdown: (text) => tty.renderMarkdown(text)
+    formatter: Formatter
   };
 
   console.log('Terminal initialized successfully');

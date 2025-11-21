@@ -303,45 +303,10 @@ export class FileSystem {
   }
 }
 
-// Legacy global functions for backward compatibility
-let globalFileSystem = null;
 
-export function initGlobalFileSystem() {
-  if (!globalFileSystem) {
-    globalFileSystem = new FileSystem();
+document.addEventListener('keydown', (e) => {
+  if (e.shiftKey && e.key === 'R' && (e.ctrlKey || e.metaKey)) {
+    localStorage.removeItem(LOCAL_STORAGE_KEY);
+    window.location.reload();
   }
-  return globalFileSystem;
-}
-
-// Global compatibility layer
-if (typeof window !== 'undefined') {
-  window.resolvePath = function (currentPath, targetPath) {
-    if (!globalFileSystem) globalFileSystem = new FileSystem();
-    return globalFileSystem.resolvePath(currentPath, targetPath);
-  };
-
-  window.getNode = function (pathParts) {
-    if (!globalFileSystem) globalFileSystem = new FileSystem();
-    return globalFileSystem.getNode(pathParts);
-  };
-
-  window.saveFS = function () {
-    if (!globalFileSystem) globalFileSystem = new FileSystem();
-    globalFileSystem.save();
-  };
-
-  // Keyboard shortcut for reset
-  document.addEventListener('keydown', (e) => {
-    if (e.shiftKey && e.key === 'R' && (e.ctrlKey || e.metaKey)) {
-      if (globalFileSystem) {
-        globalFileSystem.reset();
-      } else {
-        localStorage.removeItem(LOCAL_STORAGE_KEY);
-        window.location.reload();
-      }
-    }
-  });
-}
-
-// Export the global filesystem variable for access
-export { globalFileSystem };
+});

@@ -1,7 +1,7 @@
 return {
     description: 'Clear terminal output',
-    execute: (args, term) => {
-        term.clear();
+    execute: (args, context) => {
+        context.shell.tty.clear();
         return '';
     }
 };

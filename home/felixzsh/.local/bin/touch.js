@@ -1,37 +1,23 @@
 return {
   description: "Makes an empty file",
-  execute: (args, term, options) => {
+  execute: (args, context, options) => {
     if (args.length === 0 || options.help) {
-      //TODO: fix filename render
       return "Usage: touch &lt;file_name&gt;\n\nCreate a new file or update timestamp (simple implementation).";
     }
 
     const filePath = args[0];
-    const pathParts = resolvePath(term.currentPath, filePath);
+    const fullPath = '/' + context.fs.resolvePath(context.cwd, filePath).join('/');
 
-    if (pathParts.length === 0) {
-      return `<span style="color: var(--red)">touch: cannot create file '': Invalid path or root directory</span>`;
+    // Check if file already exists
+    if (context.fs.exists(fullPath)) {
+      return ""; // Touch just updates timestamp, we'll just return success
     }
 
-    const fileName = pathParts.pop();
-    const parentPath = pathParts;
+    const success = context.fs.writeFile(fullPath, "");
 
-    const parentNode = getNode(parentPath);
-
-    if (!parentNode || parentNode.type !== 'directory' || !parentNode.children) {
+    if (!success) {
       return `<span style="color: var(--red)">touch: cannot create file '${filePath}': No such file or directory</span>`;
     }
-
-    if (parentNode.children[fileName]) {
-      return "";
-    }
-
-    parentNode.children[fileName] = {
-      "type": "file",
-      "content": ""
-    };
-
-    saveFS();
 
     return "";
   }

@@ -1,36 +1,18 @@
 return {
   description: "Makes an empty directory",
-  execute: (args, term, options) => {
+  execute: (args, context, options) => {
     if (args.length === 0 || options.help) {
       return "Usage: mkdir &lt;directory_name&gt;\n\nCreate new directory.";
     }
 
     const newDirPath = args[0];
-    const pathParts = resolvePath(term.currentPath, newDirPath);
+    const success = context.fs.createDirectory(
+      '/' + context.fs.resolvePath(context.cwd, newDirPath).join('/')
+    );
 
-    if (pathParts.length === 0) {
-      return `<span style="color: var(--red)">mkdir: cannot create directory '': File exists (or invalid path)</span>`;
+    if (!success) {
+      return `<span style="color: var(--red)">mkdir: cannot create directory '${newDirPath}': File exists or parent directory does not exist</span>`;
     }
-
-    const dirName = pathParts.pop();
-    const parentPath = pathParts;
-
-    const parentNode = getNode(parentPath);
-
-    if (!parentNode || parentNode.type !== 'directory' || !parentNode.children) {
-      return `<span style="color: var(--red)">mkdir: cannot create directory '${newDirPath}': No such file or directory (parent does not exist)</span>`;
-    }
-
-    if (parentNode.children[dirName]) {
-      return `<span style="color: var(--red)">mkdir: cannot create directory '${newDirPath}': File exists</span>`;
-    }
-
-    parentNode.children[dirName] = {
-      "type": "directory",
-      "children": {}
-    };
-
-    saveFS();
 
     return "";
   }
