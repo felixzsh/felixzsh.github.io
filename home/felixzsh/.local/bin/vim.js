@@ -34,9 +34,11 @@ return {
       isNewFile = true;
     }
 
-    term.toggleEditor(true, fileNode, absPath);
+    term.lockInput();
 
     const editorContainer = document.getElementById('editor-container');
+    editorContainer.style.display = 'block';
+    document.getElementById('terminal').style.opacity = '0';
 
     const editor = CodeMirror(editorContainer, {
       value: initialContent,
@@ -51,25 +53,14 @@ return {
       }
     });
 
-    editor.on('keydown', (cm, e) => {
-      if (e.keyCode === 27) {
-        setTimeout(() => {
-          if (!cm.hasFocus()) {
-            cm.focus();
-          }
-        }, 0);
-      }
-    });
+    const closeEditor = () => {
+      editorContainer.innerHTML = '';
+      editorContainer.style.display = 'none';
+      document.getElementById('terminal').style.opacity = '1';
+      term.unlockInput();
+    };
 
-    editor.on('vim-mode-change', function(e) {
-      if (e.mode === 'normal' || e.mode === 'visual') {
-        setTimeout(() => {
-          editor.focus();
-        }, 0);
-      }
-    });
-
-    CodeMirror.Vim.defineEx("write", "w", function() {
+    CodeMirror.Vim.defineEx("write", "w", function () {
       const newContent = editor.getValue();
 
       if (isNewFile) {
@@ -81,19 +72,13 @@ return {
       fileNode.content = newContent;
       saveFS();
 
-      editor.setOption('readOnly', 'nocursor');
-      setTimeout(() => editor.setOption('readOnly', false), 500);
-
-      setTimeout(() => {
-        editor.focus();
-      }, 500);
     });
 
-    CodeMirror.Vim.defineEx("quit", "q", function() {
-      term.toggleEditor(false);
+    CodeMirror.Vim.defineEx("quit", "q", function () {
+      closeEditor();
     });
 
-    CodeMirror.Vim.defineEx("wq", "wq", function(cm) {
+    CodeMirror.Vim.defineEx("wq", "wq", function (cm) {
       CodeMirror.Vim.handleEx(cm, 'w');
       CodeMirror.Vim.handleEx(cm, 'q');
     });

@@ -3,12 +3,9 @@ class Terminal {
     this.output = document.getElementById('output');
     this.input = document.getElementById('command-input');
     this.promptPath = document.querySelector('.path');
-    this.editorContainer = document.getElementById('editor-container');
     this.currentPath = '/home/felixzsh';
     this.history = [];
-    this.isEditorActive = false;
-    this.currentFileNode = null;
-    this.editorInstance = null;
+    this.inputLocked = false;
 
     this.aliases = {
       'aboutme': 'whoami',
@@ -23,9 +20,11 @@ class Terminal {
     // Initialize terminal event listeners and components
     this.input.addEventListener('keydown', (e) => this.handleInput(e));
     document.addEventListener('click', (e) => {
-      // Only focus if the editor is not active and the click is not inside the editor container
-      if (!this.isEditorActive && !this.editorContainer.contains(e.target)) {
+      // Only focus if input is not locked
+      if (!this.inputLocked) {
         this.input.focus();
+      } else {
+        console.log('Click ignored because input is locked');
       }
     });
     this.updatePrompt();
@@ -33,28 +32,17 @@ class Terminal {
   }
 
 
-  toggleEditor(activate, fileNode = null, absolutePath = null) {
-    this.isEditorActive = activate;
-    this.currentFileNode = fileNode;
-    this.currentFilePath = absolutePath;
+  lockInput() {
+    console.log('Locking input');
+    this.inputLocked = true;
+    this.input.blur();
+  }
 
-    if (activate) {
-      this.editorContainer.style.display = 'block';
-      document.getElementById('terminal').style.opacity = '0';
-      this.input.blur();
-    } else {
-
-      if (this.editorInstance) {
-        //TODO: check if codemirror has destruction methods
-      }
-      this.editorContainer.innerHTML = '';
-      this.editorInstance = null;
-
-      document.getElementById('terminal').style.opacity = '1';
-      this.editorContainer.style.display = 'none';
-      this.input.focus();
-      this.scrollToBottom();
-    }
+  unlockInput() {
+    console.log('Unlocking input');
+    this.inputLocked = false;
+    this.input.focus();
+    this.scrollToBottom();
   }
 
   updatePrompt() {
