@@ -1,7 +1,3 @@
-/**
- * FileSystem - Virtual filesystem with localStorage persistence
- */
-
 const LOCAL_STORAGE_KEY = 'terminal_portfolio_fs';
 
 export class FileSystem {
@@ -57,9 +53,6 @@ export class FileSystem {
       });
   }
 
-  /**
-   * Saves filesystem to localStorage
-   */
   save() {
     try {
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(this.root));
@@ -68,9 +61,6 @@ export class FileSystem {
     }
   }
 
-  /**
-   * Resets filesystem to default from filesystem.json
-   */
   reset() {
     localStorage.removeItem(LOCAL_STORAGE_KEY);
     window.location.reload();
