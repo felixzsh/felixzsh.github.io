@@ -1,9 +1,13 @@
 {
     "scripts": {
-        "dev": "node scripts/generate-fs-json.js && browser-sync start --server . --files 'index.html, index.css, js/**/*.js, themes/*.css' --port 8000",
+        "dev": "concurrently \"npm run watch:build\" \"npm run serve\"",
+        "serve": "node scripts/generate-fs-json.js && browser-sync start --server . --files 'index.html, index.css, js/**/*.js, themes/*.css' --port 8000",
+        "watch:build": "onchange 'home/felixzsh/.local/bin/**/*' -- node scripts/generate-fs-json.js",
         "build": "node scripts/generate-fs-json.js"
     },
     "devDependencies": {
-        "browser-sync": "^3.0.4"
+        "browser-sync": "^3.0.4",
+        "concurrently": "^9.2.1",
+        "onchange": "^7.1.0"
     }
 }
