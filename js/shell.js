@@ -1,4 +1,7 @@
 import { Formatter } from './formatter.js';
+import { AutocompletionHandler } from './autocompletion.js';
+import { SimpleSyncStream } from './stream.js'; // Assuming you saved your class here
+import { CommandParser } from './command-parser.js';
 
 export class Shell {
   constructor(tty, filesystem) {
@@ -17,268 +20,268 @@ export class Shell {
     this.aliases = {
       'aboutme': 'whoami',
       'intro': 'whoami',
-      'cls': 'clear'
+      'cls': 'clear',
+      'll': 'ls -l'
     };
 
-    // Update prompt with initial path
+    this.autoCompleter = new AutocompletionHandler(
+      this.fs,
+      () => this.currentPath,
+      () => this.getEnv('PATH')
+    );
+
     this.tty.updatePrompt(this.env.PWD);
+    this.tty.onTabComplete(this.getCompletionsCallback);
   }
 
-  /**
-   * Get current working directory
-   */
-  get currentPath() {
-    return this.env.PWD;
-  }
-
-  /**
-   * Set current working directory
-   */
+  // --- Environment Getters/Setters (Same) ---
+  get currentPath() { return this.env.PWD; }
   set currentPath(path) {
     this.env.PWD = path;
     this.tty.updatePrompt(path);
   }
+  setEnv(key, value) { this.env[key] = value; }
+  getEnv(key) { return this.env[key]; }
+  setAlias(name, expansion) { this.aliases[name] = expansion; }
+  resolveAlias(name) { return this.aliases[name] || null; }
+
+
+  // ==========================================================================
+  //                        PUBLIC EXECUTION API
+  // ==========================================================================
 
   /**
-   * Set environment variable
-   * @param {string} key - Variable name
-   * @param {string} value - Variable value
+   * 1. HANDLE USER INPUT: Entry point from TTY (Visual).
+   * Prints what happens on screen.
    */
-  setEnv(key, value) {
-    this.env[key] = value;
-  }
-
-  /**
-   * Get environment variable
-   * @param {string} key - Variable name
-   * @returns {string|undefined} Variable value
-   */
-  getEnv(key) {
-    return this.env[key];
-  }
-
-  /**
-   * Set alias
-   * @param {string} name - Alias name
-   * @param {string} expansion - Command expansion
-   */
-  setAlias(name, expansion) {
-    this.aliases[name] = expansion;
-  }
-
-  /**
-   * Resolve alias
-   * @param {string} name - Alias name
-   * @returns {string|null} Expanded command or null
-   */
-  resolveAlias(name) {
-    return this.aliases[name] || null;
-  }
-
-  /**
-   * Execute a command line
-   * @param {string} commandLine - Full command line to execute
-   */
-  execute(commandLine) {
+  handleUserInput(commandLine) {
     this.tty.printPromptLine(commandLine);
+    if (!commandLine.trim()) return;
 
-    const parts = commandLine.trim().split(/\s+/);
-    let cmdName = parts[0];
-    const rawArgs = parts.slice(1);
-
-    // Parse arguments and options
-    const args = [];
-    const options = {};
-
-    rawArgs.forEach(arg => {
-      if (arg.startsWith('--')) {
-        const key = arg.slice(2);
-        options[key] = true;
-      } else if (arg.startsWith('-')) {
-        const chars = arg.slice(1).split('');
-        chars.forEach(c => options[c] = true);
-      } else {
-        args.push(arg);
-      }
+    // Execute the pipeline connecting the final output to the TTY print function
+    this.#executePipeline(commandLine, {
+      stdout: (data) => this.tty.print(data),
+      stderr: (data) => this.tty.print(Formatter.error(data))
     });
-
-    // Resolve aliases
-    if (this.aliases[cmdName]) {
-      const aliasExpansion = this.aliases[cmdName].split(' ');
-      cmdName = aliasExpansion[0];
-      const aliasArgs = aliasExpansion.slice(1);
-      args.unshift(...aliasArgs);
-    }
-
-    // Load and execute command
-    const cmdDef = this.loadCommand(cmdName);
-
-    if (cmdDef) {
-      try {
-        // Create context for command
-        const context = this.createContext(args, options);
-
-        // Execute command with new context signature
-        const result = cmdDef.execute(args, context, options);
-
-        if (result) {
-          this.tty.print(result);
-        }
-      } catch (err) {
-        this.tty.print(Formatter.error(`Error executing command: ${err.message}`));
-        console.error('Command execution error:', err);
-      }
-    } else {
-      this.tty.print(Formatter.error(`${cmdName}: command not found`));
-    }
 
     this.tty.scrollToBottom();
   }
 
   /**
-   * Load a command from the filesystem
-   * @param {string} name - Command name
-   * @returns {object|null} Command definition or null
+   * 2. EXEC: Programmatic "Visual" Execution (For scripts that want to print).
+   * Behaves the same as if the user typed it, but from code.
    */
-  loadCommand(name) {
-    const binPath = ['home', 'felixzsh', '.local', 'bin'];
-    const binNode = this.fs.getNode(binPath);
-
-    if (!binNode || !binNode.children) return null;
-
-    const filename = name + '.js';
-    if (binNode.children[filename]) {
-      const content = binNode.children[filename].content;
-      try {
-        // Create command factory function
-        // The factory doesn't need context, it just returns the command definition
-        const cmdFactory = new Function('context', content);
-
-        // Execute factory to get command definition
-        // Pass empty object as context parameter (not used by commands)
-        return cmdFactory({});
-      } catch (e) {
-        console.error(`Error loading command ${name}:`, e);
-        return null;
-      }
-    }
-
-    return null;
+  exec(commandLine) {
+    // By default prints to TTY, unless otherwise specified in arguments
+    // but here we assume the standard "exec" behavior = visible side effects.
+    return this.#executePipeline(commandLine, {
+      stdout: (data) => this.tty.print(data),
+      stderr: (data) => this.tty.print(Formatter.error(data))
+    });
   }
 
   /**
-   * Create execution context for commands
-   * @param {string[]} args - Parsed arguments
-   * @param {object} options - Parsed options
-   * @returns {object} Context object
+   * 3. RUN: Programmatic "Silent" Execution (For variables/capture).
+   * Equivalent to $(cmd) in Bash. Returns the result string.
    */
-  createContext(args, options) {
+  run(commandLine) {
+    // Create a stream that accumulates in memory (without destination function)
+    const captureStream = new SimpleSyncStream();
+
+    const result = this.#executePipeline(commandLine, {
+      stdout: captureStream,
+      // stderr generally we want to see it if it fails, or you could capture it too
+      stderr: (data) => console.error(`[Script Error] ${data}`)
+    });
+
+    // Return the object with the output read from the buffer
     return {
-      // Core context properties
+      output: captureStream.read(), // Read the accumulated data
+      code: result.code
+    };
+  }
+
+
+  // ==========================================================================
+  //                        PIPELINE ORCHESTRATOR (PRIVATE)
+  // ==========================================================================
+
+  /**
+   * The heart of the system. Parses '|', '>', '>>' and connects the streams.
+   * @param {string} fullCommandLine - Complete line (e.g.: "ls | grep js > file.txt")
+   * @param {object} finalDestinations - { stdout, stderr } Final destinations of the last command
+   */
+  #executePipeline(fullCommandLine, finalDestinations) {
+    const commands = CommandParser.parse(fullCommandLine);
+
+    // pipeData: Es la "pelota" que se pasan los comandos.
+    // Al principio está vacía. Si hay un pipe, se llena con el resultado.
+    let pipeData = '';
+    let lastExitCode = 0;
+
+    for (let i = 0; i < commands.length; i++) {
+      const cmd = commands[i];
+      const isLast = i === commands.length - 1;
+
+      // 1. PREPARAR ENTRADA (STDIN)
+      // ---------------------------
+      const stdinStream = new SimpleSyncStream();
+
+      if (cmd.input) {
+        // Caso: Redirección explícita "< archivo.txt" (Gana sobre el pipe)
+        try {
+          const fileContent = this.fs.readFile(cmd.input, this.currentPath);
+          stdinStream.write(fileContent); // Llenamos el stream
+        } catch (e) {
+          finalDestinations.stderr(`bash: ${cmd.input}: No such file or directory`);
+          return { code: 1 };
+        }
+      } else if (pipeData) {
+        // Caso: Viene info del comando anterior (Pipe)
+        stdinStream.write(pipeData);
+      }
+
+      // 2. PREPARAR SALIDA (STDOUT)
+      // ---------------------------
+      // Por defecto, escribimos a un buffer temporal para capturar la salida
+      // y decidir luego si se la pasamos al siguiente comando o la imprimimos.
+      const stdoutStream = new SimpleSyncStream();
+
+      // El stderr va directo a pantalla siempre en esta versión simple
+      const stderrStream = new SimpleSyncStream(finalDestinations.stderr);
+
+      // 3. EJECUTAR COMANDO
+      // -------------------
+      // Reconstruimos "cmd args" para tu método executeSingleCommand
+      const cmdStr = [cmd.args[0], ...cmd.args.slice(1)].join(' ');
+
+      // Ejecutamos (pasándole nuestros streams preparados)
+      const result = this.#executeSingleCommand(cmdStr, {
+        stdin: stdinStream,
+        stdout: stdoutStream,
+        stderr: stderrStream
+      }, cmd.args); // Pasamos args ya parseados para optimizar
+
+      lastExitCode = result.code;
+
+      // Si el comando falló, detenemos la cadena (comportamiento habitual &&, 
+      // aunque en pipes bash suele seguir, para demo web mejor parar si hay error)
+      if (lastExitCode !== 0) break;
+
+      // 4. GESTIONAR RESULTADO (¿A dónde va lo que salió?)
+      // --------------------------------------------------
+      const outputCaptured = stdoutStream.read(); // Leemos lo que el comando escupió
+
+      if (cmd.output) {
+        // Caso A: Redirección a archivo (> ó >>)
+        try {
+          if (cmd.mode === 'append') {
+            this.fs.appendFile(cmd.output, outputCaptured, this.currentPath);
+          } else {
+            this.fs.writeFile(cmd.output, outputCaptured, this.currentPath);
+          }
+          pipeData = ''; // Si va a archivo, no sigue por el pipe
+        } catch (e) {
+          finalDestinations.stderr(`Error writing to ${cmd.output}`);
+        }
+      }
+      else if (!isLast) {
+        // Caso B: Hay un pipe después (|)
+        // Guardamos la salida para que sea la entrada del siguiente loop
+        pipeData = outputCaptured;
+      }
+      else {
+        // Caso C: Es el último comando y no hay archivo
+        // Imprimimos en la pantalla real
+        finalDestinations.stdout(outputCaptured);
+      }
+    }
+
+    return { code: lastExitCode };
+  }
+
+  /**
+   * Ejecuta un comando individual.
+   * Modificado ligeramente para aceptar args pre-procesados.
+   */
+  #executeSingleCommand(commandStr, streams, parsedArgs) {
+    const cmdName = parsedArgs[0];
+    const rawArgs = parsedArgs.slice(1);
+
+    // Parseo básico de banderas (flags)
+    const options = {};
+    const args = [];
+
+    rawArgs.forEach(arg => {
+      if (arg.startsWith('--')) options[arg.slice(2)] = true;
+      else if (arg.startsWith('-')) arg.slice(1).split('').forEach(c => options[c] = true);
+      else args.push(arg);
+    });
+
+    // Alias (Simplificado)
+    if (this.aliases[cmdName]) {
+      // Nota: Para una demo simple, a veces es mejor resolver el alias 
+      // antes de entrar a esta función, pero esto funciona para alias simples.
+      const aliasParts = this.aliases[cmdName].split(' ');
+      // Recursividad simple: llamamos de nuevo con el string expandido
+      // Cuidado con bucles infinitos en alias
+      return this.#executeSingleCommand(
+        this.aliases[cmdName] + ' ' + rawArgs.join(' '),
+        streams,
+        [...aliasParts, ...rawArgs]
+      );
+    }
+
+    const cmdDef = this.loadCommand(cmdName);
+    if (!cmdDef) {
+      streams.stderr.write(`${cmdName}: command not found`);
+      return { code: 127 };
+    }
+
+    const context = {
       shell: this,
       fs: this.fs,
       env: { ...this.env },
       cwd: this.currentPath,
       args: args,
       options: options,
-      rawArgs: [...args],
-
-      // Streams
-      stdin: null,
-      stdout: (data) => this.tty.print(data),
-      stderr: (data) => this.tty.print(Formatter.error(data))
+      stdin: streams.stdin,   // El comando leerá de aquí con stdin.read()
+      stdout: streams.stdout, // El comando escribirá aquí con stdout.write()
+      stderr: streams.stderr
     };
-  }
 
-  /**
-   * Get available commands from filesystem
-   * @returns {string[]} Array of command names
-   */
-  getAvailableCommands() {
-    const binPath = ['home', 'felixzsh', '.local', 'bin'];
-    const binNode = this.fs.getNode(binPath);
-
-    if (!binNode || !binNode.children) return [];
-
-    return Object.keys(binNode.children)
-      .filter(f => f.endsWith('.js'))
-      .map(f => f.replace('.js', ''));
-  }
-
-  /**
-   * Get tab completion suggestions
-   * @param {string} currentInput - Current input string
-   * @returns {object|null} Completion result
-   */
-  getCompletions(currentInput) {
-    const parts = currentInput.split(/\s+/);
-    const isNewArg = currentInput.endsWith(' ');
-
-    // Case 1: Command Completion (First part)
-    if (parts.length === 1 && !isNewArg) {
-      const prefix = parts[0];
-      const allCommands = this.getAvailableCommands();
-      const matches = allCommands.filter(cmd => cmd.startsWith(prefix));
-
-      if (matches.length === 0) return null;
-
-      if (matches.length === 1) {
-        return { type: 'complete', value: matches[0] + ' ' };
-      } else {
-        return { type: 'suggestions', suggestions: matches };
-      }
-    }
-
-    // Case 2: File/Directory Completion (Arguments)
-    let partialPath = isNewArg ? '' : parts[parts.length - 1];
-
-    let dirPath = '.';
-    let filePrefix = partialPath;
-
-    if (partialPath.includes('/')) {
-      const lastSlashIndex = partialPath.lastIndexOf('/');
-      dirPath = partialPath.slice(0, lastSlashIndex) || '/';
-      filePrefix = partialPath.slice(lastSlashIndex + 1);
-    }
-
-    // Resolve the directory node
-    const resolvedParts = this.fs.resolvePath(this.currentPath, dirPath);
-    const node = this.fs.getNode(resolvedParts);
-
-    if (!node || !node.children) return null;
-
-    const options = Object.keys(node.children);
-    const matches = options.filter(name => name.startsWith(filePrefix));
-
-    if (matches.length === 0) return null;
-
-    if (matches.length === 1) {
-      const match = matches[0];
-      const isDir = node.children[match].type === 'directory';
-
-      let newPathSegment = match + (isDir ? '/' : '');
-
-      let newValue;
-      if (partialPath.includes('/')) {
-        const lastSlashIndex = partialPath.lastIndexOf('/');
-        const basePath = partialPath.slice(0, lastSlashIndex + 1);
-        const newPartial = basePath + newPathSegment;
-
-        // Reconstruct full input
-        const inputUpToPartial = currentInput.slice(0, currentInput.lastIndexOf(partialPath));
-        newValue = inputUpToPartial + newPartial;
-      } else {
-        // Replace last part
-        parts[parts.length - 1] = newPathSegment;
-        newValue = parts.join(' ');
-      }
-
-      return { type: 'complete', value: newValue };
-    } else {
-      const displayMatches = matches.map(name => {
-        return node.children[name].type === 'directory' ? name + '/' : name;
-      });
-      return { type: 'suggestions', suggestions: displayMatches };
+    try {
+      const exitCode = cmdDef.execute(args, context, options);
+      return { code: exitCode === undefined ? 0 : exitCode };
+    } catch (err) {
+      streams.stderr.write(`Error: ${err.message}`);
+      return { code: 1 };
     }
   }
+  // --- Command Loading (Same) ---
+  loadCommand(name) {
+    const binPath = this.getEnv('PATH');
+    const commandFilePath = `${binPath}/${name}.js`;
+
+    if (!this.fs.isFile(commandFilePath)) return null;
+
+    try {
+      const content = this.fs.readFile(commandFilePath);
+      const cmdFactory = new Function('context', content);
+      return cmdFactory({});
+    } catch (e) {
+      console.error(`Error loading command ${name}:`, e);
+      return null;
+    }
+  }
+
+  // Autocompletion (Callback)
+  getCompletionsCallback = (input) => this.autoCompleter.handleCompletion(input);
 }
+
+
+
+
+
+
+
