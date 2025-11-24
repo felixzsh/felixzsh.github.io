@@ -1,43 +1,57 @@
 return {
-  description: "evolution of the unix vi editor",
+  description: "Evolution of the Unix vi editor (CodeMirror integration)",
+
   execute: (args, context, options) => {
-    if (args.length === 0 || options.help) {
-      return "Use: vim &lt;file_name&gt;\n\nEdits a file in the virtual filesystem.";
-    }
+    const { fs, cwd, shell, stdout, stderr } = context;
 
+    // --- VIM Session State ---
     const rawPath = args[0];
-    const absPathParts = context.fs.resolvePath(context.cwd, rawPath);
-    const absPath = '/' + absPathParts.join('/');
-
-    const parentPathParts = absPathParts.slice(0, -1);
-    const fileName = absPathParts[absPathParts.length - 1];
-
-    let fileNode = context.fs.getNode(absPathParts);
-    let isNewFile = false;
     let initialContent = "";
+    let isNewFile = false;
+    let hasBeenWritten = false;
 
-    if (fileNode) {
-      if (fileNode.type === 'directory') {
-        return `<span style="color: var(--red)">vim: '${rawPath}': is a directory</span>`;
-      }
-      initialContent = fileNode.content || "";
-    } else {
-      const parentNode = context.fs.getNode(parentPathParts);
-
-      if (!parentNode || parentNode.type !== 'directory') {
-        return `<span style="color: var(--red)">vim: '${rawPath}': No such file or directory</span>`;
-      }
-
-      fileNode = { "type": "file", "content": "" };
-      isNewFile = true;
+    if (args.length === 0 || options.help) {
+      stdout.write("Usage: vim <file_name>\n\nEdits a file in the virtual filesystem.\n");
+      return 0;
     }
 
-    // Lock terminal input while vim is open
-    context.shell.tty.lockInput();
+    try {
+      initialContent = fs.readFile(rawPath, cwd);
+    } catch (e) {
+
+      if (fs.isDirectory(rawPath, cwd)) {
+        stderr.write(`vim: '${rawPath}': Is a directory\n`);
+        return 1;
+      }
+
+      try {
+        // This call internally handles '..', '.', and CWD resolution.
+        const parentDir = fs.getParentDirPath(rawPath, cwd);
+
+        // Check: Only abort if the parent directory does NOT exist or is NOT a directory.
+        if (parentDir !== '/' && !fs.isDirectory(parentDir, '/')) {
+          stderr.write(`vim: '${rawPath}': No such file or directory\n`);
+          return 1;
+        }
+
+        initialContent = "";
+        isNewFile = true;
+
+      } catch (pathResolutionError) {
+        // Catches errors like trying to get the parent of the root, though getParentDirPath 
+        // should typically handle it gracefully (returning '/').
+        stderr.write(`vim: '${rawPath}': No such file or directory\n`);
+        return 1;
+      }
+    }
+
+
+    shell.tty.lockInput();
 
     const editorContainer = document.getElementById('editor-container');
     editorContainer.style.display = 'block';
     document.getElementById('terminal').style.opacity = '0';
+    editorContainer.innerHTML = '';
 
     const editor = CodeMirror(editorContainer, {
       value: initialContent,
@@ -46,12 +60,12 @@ return {
       keyMap: "vim",
       lineNumbers: true,
       autofocus: true,
-
       extraKeys: {
         ':': CodeMirror.Vim.startEx
       }
     });
 
+    // CRITICAL: Logic to force editor focus back on ESC key (required for Vim)
     editor.on('keydown', (cm, e) => {
       if (e.keyCode === 27) {
         setTimeout(() => {
@@ -62,37 +76,68 @@ return {
       }
     });
 
+    editor.changeHandled = false;
+    editor.on('change', () => { editor.changeHandled = true; });
 
 
-    const closeEditor = () => {
+
+    const closeEditor = (shouldSave = false) => {
+      if (!shouldSave && editor.changeHandled && !hasBeenWritten) {
+        editor.openNotification(`<span style="color: var(--yellow)">No write since last change (add ! to override)</span>`, { duration: 3000 });
+        return false;
+      }
+
       editorContainer.innerHTML = '';
       editorContainer.style.display = 'none';
       document.getElementById('terminal').style.opacity = '1';
-      context.shell.tty.unlockInput();
+
+      shell.tty.unlockInput();
+      return 0;
     };
 
-    CodeMirror.Vim.defineEx("write", "w", function () {
+
+    const commandWrite = () => {
       const newContent = editor.getValue();
 
-      if (isNewFile) {
-        const parentNode = context.fs.getNode(parentPathParts);
-        parentNode.children[fileName] = fileNode;
+      try {
+        fs.writeFile(rawPath, newContent, cwd);
+
+        editor.changeHandled = false;
+        hasBeenWritten = true;
         isNewFile = false;
+
+        editor.openNotification(`<span style="color: var(--green)">"${rawPath}" written</span>`, { duration: 1000 });
+
+      } catch (e) {
+        editor.openNotification(`<span style="color: var(--red)">Error: ${e.message}</span>`, { duration: 3000 });
+        stderr.write(`vim: Error writing file: ${e.message}\n`);
       }
+    };
 
-      fileNode.content = newContent;
-      context.fs.save();
+    // :w
+    CodeMirror.Vim.defineEx("write", "w", commandWrite);
+
+    // :q, :q!
+    CodeMirror.Vim.defineEx("quit", "q", function(cm, params) {
+      const force = params.argString === '!';
+
+      if (force) {
+        closeEditor(true);
+      } else if (editor.changeHandled && !hasBeenWritten) {
+        closeEditor(false);
+      } else {
+        closeEditor(true);
+      }
     });
 
-    CodeMirror.Vim.defineEx("quit", "q", function () {
-      closeEditor();
-    });
-
-    CodeMirror.Vim.defineEx("wq", "wq", function (cm) {
-      CodeMirror.Vim.handleEx(cm, 'w');
-      CodeMirror.Vim.handleEx(cm, 'q');
+    // :wq
+    CodeMirror.Vim.defineEx("wq", "wq", function(cm) {
+      commandWrite();
+      setTimeout(() => {
+        CodeMirror.Vim.handleEx(cm, 'q');
+      }, 100);
     });
 
     return null;
   }
-}
+};

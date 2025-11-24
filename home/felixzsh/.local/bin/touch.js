@@ -1,24 +1,19 @@
+// Contenido para /bin/touch.js
 return {
-  description: "Makes an empty file",
+  description: "Create a new, empty file or update the timestamp (simple implementation).",
   execute: (args, context, options) => {
+    const { fs, cwd, stdout, stderr } = context;
     if (args.length === 0 || options.help) {
-      return "Usage: touch &lt;file_name&gt;\n\nCreate a new file or update timestamp (simple implementation).";
+      stdout.write("Usage: touch <file_name>\n\nCreate a new file or update timestamp (simple implementation).\n");
+      return 0;
     }
-
     const filePath = args[0];
-    const fullPath = '/' + context.fs.resolvePath(context.cwd, filePath).join('/');
-
-    // Check if file already exists
-    if (context.fs.exists(fullPath)) {
-      return ""; // Touch just updates timestamp, we'll just return success
+    try {
+      fs.writeFile(filePath, "", cwd);
+      return 0;
+    } catch (e) {
+      stderr.write(`touch: cannot touch '${filePath}': ${e.message}\n`);
+      return 1;
     }
-
-    const success = context.fs.writeFile(fullPath, "");
-
-    if (!success) {
-      return `<span style="color: var(--red)">touch: cannot create file '${filePath}': No such file or directory</span>`;
-    }
-
-    return "";
   }
-}
+};

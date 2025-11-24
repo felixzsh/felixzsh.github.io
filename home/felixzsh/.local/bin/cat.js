@@ -1,18 +1,26 @@
+// Content for /bin/cat.js
 return {
-    description: 'Print file content',
-    execute: (args, context) => {
-        if (!args[0]) return 'cat: missing operand';
+  description: 'Concatenate files and print on the standard output.',
+  execute: (args, context) => {
+    const { fs, cwd, stdin, stdout, stderr } = context;
+    let exitCode = 0;
 
-        const resolvedParts = context.fs.resolvePath(context.cwd, args[0]);
-        const node = context.fs.getNode(resolvedParts);
-
-        if (!node) {
-            return `cat: ${args[0]}: No such file or directory`;
+    if (args.length > 0) {
+      for (const path of args) {
+        try {
+          const content = fs.readFile(path, cwd);
+          stdout.write(content);
+        } catch (e) {
+          stderr.write(`cat: ${path}: ${e.message}\n`);
+          exitCode = 1;
         }
-        if (node.type === 'directory') {
-            return `cat: ${args[0]}: Is a directory`;
-        }
-
-        return context.stdout(node.content || '');
+      }
+    } else {
+      const input = stdin.read();
+      if (input) {
+        stdout.write(input);
+      }
     }
+    return exitCode;
+  }
 };
