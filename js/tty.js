@@ -1,7 +1,18 @@
 import { Formatter } from './formatter.js';
 
+/**
+ * Class managing the Terminal Teletype (TTY) interface.
+ * Handles input/output, command history, tab completion, and terminal visibility control.
+ */
 export class TTY {
-  constructor(outputElement, inputElement, promptPathElement) {
+  /**
+   * @param {HTMLElement} terminalElement - The main terminal container element (used for hiding/scrolling).
+   * @param {HTMLElement} outputElement - The output area where text is printed.
+   * @param {HTMLInputElement} inputElement - The command input field.
+   * @param {HTMLElement} promptPathElement - The element displaying the current path in the prompt.
+   */
+  constructor(terminalElement, outputElement, inputElement, promptPathElement) {
+    this.terminalElement = terminalElement;
     this.output = outputElement;
     this.input = inputElement;
     this.promptPath = promptPathElement;
@@ -9,6 +20,7 @@ export class TTY {
     this.history = [];
     this.historyIndex = 0;
     this.inputLocked = false;
+    this.isVisible = true;
 
     // Callbacks
     this.commandCallback = null;
@@ -17,18 +29,26 @@ export class TTY {
     this.init();
   }
 
+  // -------------------------------------------------------------------------
+  //  INITIALIZATION AND INPUT HANDLING
+  // -------------------------------------------------------------------------
+
   init() {
+    // Handle keyboard input in the command line
     this.input.addEventListener('keydown', (e) => this.handleInput(e));
 
+    // Focus the input when clicking anywhere on the document, unless locked or hidden
     document.addEventListener('click', (e) => {
-      if (!this.inputLocked) {
+      if (!this.inputLocked && this.isVisible) {
         this.input.focus();
-      } else {
-        console.log('Click ignored because input is locked');
       }
     });
   }
 
+  /**
+   * Processes keydown events for command execution and history navigation.
+   * @param {KeyboardEvent} e 
+   */
   handleInput(e) {
     if (this.inputLocked) return;
 
@@ -66,6 +86,9 @@ export class TTY {
     }
   }
 
+  /**
+   * Executes the tab completion callback and handles the result (complete or suggest).
+   */
   handleTabCompletion() {
     if (!this.tabCompleteCallback) return;
 
@@ -78,29 +101,76 @@ export class TTY {
       this.input.value = result.value;
     } else if (result.type === 'suggestions') {
       this.printPromptLine(currentInput);
-      this.print(result.suggestions.join('  '));
+      this.print(result.suggestions.join('  '));
     }
   }
 
+  // -------------------------------------------------------------------------
+  //  VISIBILITY AND INPUT CONTROL (Core Abstraction)
+  // -------------------------------------------------------------------------
+
   /**
-   * Register callback for command execution
-   * @param {function} callback - Function to call when user presses Enter
+   * Hides the terminal and locks the input.
+   * Used by interactive programs like vim to take control of the screen.
+   */
+  hide() {
+    if (!this.terminalElement || !this.isVisible) return;
+
+    this.lockInput();
+
+    this.isVisible = false;
+    this.terminalElement.style.opacity = '0';
+    console.log('TTY: Hiding terminal and locking input.');
+  }
+
+  /**
+   * Shows the terminal and unlocks the input.
+   * Used by interactive programs to return control to the main shell.
+   */
+  unhide() {
+    if (!this.terminalElement || this.isVisible) return;
+
+    this.isVisible = true;
+    this.terminalElement.style.opacity = '1';
+
+    this.unlockInput();
+    console.log('TTY: Showing terminal and unlocking input.');
+  }
+
+  lockInput() {
+    this.inputLocked = true;
+    this.input.blur();
+  }
+
+  unlockInput() {
+    this.inputLocked = false;
+    this.input.focus();
+    this.scrollToBottom();
+  }
+
+  // -------------------------------------------------------------------------
+  //  OUTPUT AND UTILITY METHODS
+  // -------------------------------------------------------------------------
+
+  /**
+   * Register callback for command execution.
+   * @param {function} callback - Function to call when user presses Enter.
    */
   onCommand(callback) {
     this.commandCallback = callback;
   }
 
   /**
-   * Register callback for tab completion
-   * @param {function} callback - Function to call for tab completion
+   * Register callback for tab completion.
+   * @param {function} callback - Function to call for tab completion.
    */
   onTabComplete(callback) {
     this.tabCompleteCallback = callback;
   }
 
   /**
-   * Print content to terminal
-   * @param {string} content - HTML content to print
+   * Print content to terminal output area.
+   * @param {string} content - HTML content to print.
    */
   print(content) {
     const line = document.createElement('div');
@@ -111,10 +181,11 @@ export class TTY {
   }
 
   /**
-   * Print a line with the prompt
-   * @param {string} command - Command text to show after prompt
+   * Prints a line showing the prompt and the command entered.
+   * @param {string} command - Command text to show after prompt.
    */
   printPromptLine(command) {
+    // Assumes an element with ID 'prompt' exists in the HTML for the prompt structure
     const promptHtml = document.getElementById('prompt').innerHTML;
     const line = document.createElement('div');
     line.className = 'command-line';
@@ -125,11 +196,12 @@ export class TTY {
 
 
   /**
-   * Update the prompt path display
-   * @param {string} path - Current path to display
+   * Update the prompt path display. Abbreviates /home/felixzsh to ~.
+   * @param {string} path - Current path to display.
    */
   updatePrompt(path) {
     let displayPath = path;
+    // Abbreviate home directory
     if (displayPath.startsWith('/home/felixzsh')) {
       displayPath = displayPath.replace('/home/felixzsh', '~');
     }
@@ -137,28 +209,8 @@ export class TTY {
     this.promptPath.textContent = displayPath;
   }
 
-  /**
-   * Lock input (so other tuis can take input, like vim)
-   */
-  lockInput() {
-    console.log('Locking input');
-    this.inputLocked = true;
-    this.input.blur();
-  }
-
-  /**
-   * Unlock input
-   */
-  unlockInput() {
-    console.log('Unlocking input');
-    this.inputLocked = false;
-    this.input.focus();
-    this.scrollToBottom();
-  }
-
   scrollToBottom() {
-    const terminal = document.getElementById('terminal');
-    terminal.scrollTop = terminal.scrollHeight;
+    this.terminalElement.scrollTop = this.terminalElement.scrollHeight;
   }
 
   clear() {
@@ -169,23 +221,23 @@ export class TTY {
     const welcomeMsg = `
 <pre class="whitespace-pre-wrap mb-4">
 <span style="color: var(--blue)">
-            ┌───────────────────────────────────────────┐
-            │          F E L I X   S A N C H E Z        │
-            │              P O R T F O L I O            │
-            └───────────────────────────────────────────┘
+            ┌───────────────────────────────────────────┐
+            │          F E L I X   S A N C H E Z        │
+            │              P O R T F O L I O            │
+            └───────────────────────────────────────────┘
 </span>
-            <span style="color: var(--green)">Type <span class="md-code">help</span> to see available commands.</span>
-            <span style="color: var(--green)">Press <span class="md-code">Ctrl+Shift+R</span> to reset the virtual filesystem.</span>
-            <span style="color: var(--blue)">───────────────────────────────────────────</span>
+            <span style="color: var(--green)">Type <span class="md-code">help</span> to see available commands.</span>
+            <span style="color: var(--green)">Press <span class="md-code">Ctrl+Shift+R</span> to reset the virtual filesystem.</span>
+            <span style="color: var(--blue)">───────────────────────────────────────────</span>
 </pre>
 `;
     this.print(welcomeMsg);
   }
 
   /**
-   * Render markdown content
-   * @param {string} text - Markdown text
-   * @returns {string} HTML string
+   * Renders markdown content using the external Formatter utility.
+   * @param {string} text - Markdown text.
+   * @returns {string} HTML string.
    */
   renderMarkdown(text) {
     return Formatter.renderMarkdown(text);
