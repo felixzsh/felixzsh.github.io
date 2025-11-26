@@ -1,413 +1,344 @@
-const LOCAL_STORAGE_KEY = 'terminal_portfolio_fs';
-
 /**
- * Clase que gestiona un sistema de archivos virtual persistente en localStorage.
+ * @typedef {Object} FSNode
+ * @property {'directory'|'file'} type - The type of node.
+ * @property {string} name - The name of the file or directory.
+ * @property {string} [content] - The content (only for files).
+ * @property {Object.<string, FSNode>} [children] - The children (only for directories).
+ * @property {Object} metadata - System metadata (permissions, dates).
+ * @property {number} metadata.createdAt - Creation timestamp (ms since epoch)
+ * @property {number} metadata.modifiedAt - Last modification timestamp (ms since epoch)
+ * @property {string} metadata.permissions - Unix-style permissions string (e.g., 'drwxr-xr-x', '-rw-r--r--')
  */
-export class FileSystem {
+
+export const LOCAL_STORAGE_KEY = 'terminal_portfolio_fs';
+
+export class FileSystem extends EventTarget {
   /**
    * @private
-   * El objeto raíz del sistema de archivos.
-   * Estructura: { name: { type: 'directory'|'file', children: {...} | content: '...' } }
+   * The root node of the file system.
+   * @type {FSNode}
    */
-  #root = {};
+  #root;
 
   constructor() {
-    // Inicialización de la estructura predeterminada si no se carga nada
-    this.#root = {
-      "home": {
-        "type": "directory",
-        "children": {
-          "felixzsh": {
-            "type": "directory",
-            "children": {
-              "loading.md": {
-                "type": "file",
-                "content": "# Loading...\n\nFetching latest data from GitHub..."
-              }
-            }
-          }
-        }
-      }
-    };
+    super();
+
+    // --- Default Root Structure (Hardcoded fallback) ---
+    const defaultRoot = this.#createNode('directory', '/');
+    const home = this.#createNode('directory', 'home');
+    const userDir = this.#createNode('directory', 'felixzsh');
+    const readme = this.#createNode('file', 'loading.md', "# Loading...\n\nFetching latest data from GitHub...");
+
+    defaultRoot.children['home'] = home;
+    home.children['felixzsh'] = userDir;
+    userDir.children['loading.md'] = readme;
+
+    this.#root = defaultRoot;
+
     this.load();
   }
 
-  // --- Métodos Privados (Bajo Nivel) ---
+  // =========================================================================
+  //  PRIVATE CORE METHODS
+  // =========================================================================
 
   /**
    * @private
-   * Resuelve una ruta relativa a una ruta absoluta, manejando '.' y '..'.
-   * @param {string} currentPath - Directorio de trabajo actual (e.g., '/home/user').
-   * @param {string} targetPath - Ruta objetivo (relativa o absoluta).
-   * @returns {string[]} Array de partes de la ruta resuelta.
+   * Helper to create nodes with standardized metadata.
+   * @param {'directory'|'file'} type - Node type.
+   * @param {string} name - Node name.
+   * @param {string} [content] - File content (optional).
+   * @returns {FSNode} The newly created node object.
    */
-  #resolvePath(currentPath, targetPath) {
-    let parts = [];
-
-    if (targetPath.startsWith('/')) {
-      // Ruta absoluta
-      parts = targetPath.split('/').filter(p => p !== '');
-    } else {
-      // Ruta relativa
-      parts = currentPath.split('/').filter(p => p !== '');
-      const targetParts = targetPath.split('/').filter(p => p !== '');
-
-      for (const part of targetParts) {
-        if (part === '..') {
-          parts.pop();
-        } else if (part !== '.') {
-          parts.push(part);
-        }
+  #createNode(type, name, content = null) {
+    const now = Date.now();
+    return {
+      type,
+      name,
+      content: type === 'file' ? (content || '') : undefined,
+      children: type === 'directory' ? {} : undefined,
+      metadata: {
+        createdAt: now,
+        modifiedAt: now,
+        permissions: type === 'directory' ? 'drwxr-xr-x' : '-rw-r--r--'
       }
-    }
-    return parts;
+    };
   }
 
   /**
    * @private
-   * Obtiene el nodo (el objeto JS) en una ruta específica.
-   * @param {string[]} pathParts - Array de partes de la ruta resuelta.
-   * @returns {object|null} El nodo encontrado o null.
+   * Saves to LocalStorage and notifies listeners.
    */
-  #getNode(pathParts) {
-    if (pathParts.length === 0) {
-      // La ruta raíz '/' se representa por el objeto this.#root
-      return this.#root;
+  #save() {
+    try {
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(this.#root));
+      this.dispatchEvent(new CustomEvent('fs-change', { detail: { root: this.#root } }));
+    } catch (e) {
+      console.error("FS: Error saving to localStorage:", e);
+    }
+  }
+
+  // =========================================================================
+  //  PUBLIC CORE API
+  // =========================================================================
+
+  /**
+   * Converts relative or complex paths into a clean, absolute array of segments.
+   * Logically handles '.' (current directory) and '..' (parent directory).
+   * @param {string} pathStr - The target path (relative or absolute).
+   * @param {string} cwd - Current Working Directory (e.g., '/home/user').
+   * @returns {string[]} Array of path segments (e.g., ['home', 'felixzsh', 'docs'])
+   */
+  resolvePath(pathStr, cwd = '/') {
+    const isAbsolute = pathStr.startsWith('/');
+    const baseParts = isAbsolute ? [] : cwd.split('/').filter(p => p !== '');
+    const targetParts = pathStr.split('/').filter(p => p !== '');
+
+    const stack = [...baseParts];
+
+    for (const part of targetParts) {
+      if (part === '.' || part === '') continue;
+      if (part === '..') {
+        if (stack.length > 0) stack.pop();
+      } else {
+        stack.push(part);
+      }
     }
 
-    let current = this.#root;
-    for (const part of pathParts) {
-      // Los nodos en la raíz se guardan directamente, los demás en 'children'
-      const container = current.children || current;
+    return stack;
+  }
 
-      if (container[part] && (container[part].type === 'directory' || container[part].type === 'file')) {
-        current = container[part];
-      } else {
+  /**
+   * Traverses the filesystem tree based on path segments and returns the target node.
+   * @param {string[]} segments - Array of path parts (from resolvePath).
+   * @returns {FSNode|null} The target node, or null if not found.
+   */
+  getNode(segments) {
+    let current = this.#root;
+    if (segments.length === 0) {
+      return current;
+    }
+    for (const segment of segments) {
+      if (current.type !== 'directory') {
         return null;
       }
+      const nextNode = current.children?.[segment];
+      if (!nextNode) {
+        return null;
+      }
+      current = nextNode;
     }
     return current;
   }
 
-  /**
-   * @private
-   * Obtiene el nodo padre y el nombre de la entrada en una ruta.
-   * @param {string[]} pathParts - Array de partes de la ruta resuelta.
-   * @returns {{parentNode: object|null, name: string}} Objeto con el nodo padre y el nombre del nodo objetivo.
-   * @throws {Error} Si la ruta es la raíz.
-   */
-  #getParentNodeAndName(pathParts) {
-    if (pathParts.length === 0) {
-      throw new Error("Cannot get parent of root directory '/'");
-    }
-
-    const name = pathParts[pathParts.length - 1];
-    const parentParts = pathParts.slice(0, -1);
-    const parentNode = this.#getNode(parentParts);
-
-    return { parentNode, name };
-  }
-
-  // --- Métodos de Persistencia (Privados) ---
-
-  /**
-   * @private
-   * Guarda el estado actual del sistema de archivos en localStorage.
-   */
-  save() {
-    try {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(this.#root));
-    } catch (e) {
-      console.error("Error saving filesystem to localStorage:", e);
-    }
-  }
+  // =========================================================================
+  //  LOADING AND PERSISTENCE
+  // =========================================================================
 
   /**
    * @public
-   * Carga el sistema de archivos desde localStorage o el archivo predeterminado.
+   * Loads the FS: LocalStorage -> Fetch Default JSON -> Hardcoded Default
    */
   load() {
     try {
-      const persistedData = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (persistedData) {
-        this.#root = JSON.parse(persistedData);
-        console.log("Filesystem loaded from local cache.");
+      const persisted = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (persisted) {
+        this.#root = JSON.parse(persisted);
+        console.log("FS: Loaded from LocalStorage cache.");
         return;
       }
     } catch (e) {
-      console.error("Error loading filesystem from localStorage:", e);
+      console.warn(`FS: Corrupt LocalStorage data detected, falling back. err: ${e}`);
     }
 
-    // Carga del archivo por defecto si no hay datos persistentes
+    // If no persistence, try to load the default JSON file
     fetch('/filesystem.json')
-      .then(response => {
-        if (!response.ok) throw new Error(`Failed to load filesystem: ${response.status}`);
-        return response.json();
+      .then(res => {
+        if (!res.ok) throw new Error('Network response was not ok');
+        return res.json();
       })
       .then(data => {
-        // La raíz del FS debe ser un directorio virtual, pero el JSON puede ser el contenido.
-        // Aseguramos que la estructura cargada sea la raíz.
         this.#root = data;
-        this.save();
-        console.log("Filesystem loaded from default file.");
+        this.#save();
+        console.log("FS: Loaded from /filesystem.json.");
       })
-      .catch(error => {
-        console.error("Error loading filesystem from default file:", error);
+      .catch(err => {
+        console.error("FS: Failed to load external JSON, using hardcoded default.", err);
+        this.#save();
       });
   }
 
   /**
    * @public
-   * Restablece el sistema de archivos a su estado inicial.
+   * Deletes all persisted data and reloads the page.
    */
   reset() {
     localStorage.removeItem(LOCAL_STORAGE_KEY);
-    // Opcional: recargar la página para una recarga limpia
     window.location.reload();
   }
 
-  // --- Métodos Públicos (API) ---
-
-  // ** 1. Consultas (Consultar) **
+  // =========================================================================
+  //  PUBLIC API (INTERFACE FOR SHELL COMMANDS)
+  // =========================================================================
 
   /**
-   * Obtiene el tipo de entrada en la ruta.
-   * @param {string} path - Ruta (relativa o absoluta).
-   * @param {string} currentPath - Ruta de trabajo actual (solo para rutas relativas).
-   * @returns {'file'|'directory'|null} Tipo de nodo o null si no existe.
+   * Reads the content of a file.
+   * @param {string} path 
+   * @param {string} cwd 
+   * @returns {string} The file content.
+   * @throws {Error} If path is not found or is a directory.
    */
-  getType(path, currentPath = '/') {
-    const parts = this.#resolvePath(currentPath, path);
-    const node = this.#getNode(parts);
-    return node ? node.type : null;
+  readFile(path, cwd = '/') {
+    const segments = this.resolvePath(path, cwd);
+    const node = this.getNode(segments);
+
+    if (!node) throw new Error(`cat: ${path}: No such file or directory`);
+    if (node.type === 'directory') throw new Error(`cat: ${path}: Is a directory`);
+
+    return node.content;
   }
 
   /**
-   * Verifica si una ruta existe.
-   * @param {string} path - Ruta.
-   * @param {string} currentPath - Ruta de trabajo actual.
+   * Lists the names of entries in a directory.
+   * @param {string} path 
+   * @param {string} cwd 
+   * @returns {string[]} List of entry names.
+   * @throws {Error} If path is not found or is a file.
+   */
+  readDir(path, cwd = '/') {
+    const segments = this.resolvePath(path, cwd);
+    const node = this.getNode(segments);
+
+    if (!node) throw new Error(`ls: ${path}: No such file or directory`);
+    if (node.type !== 'directory') throw new Error(`ls: ${path}: Not a directory`);
+
+    return Object.keys(node.children);
+  }
+
+  /**
+   * Writes content to a file (creates if not exists, overwrites if exists, appends if option enabled).
+   * @param {string} path 
+   * @param {string} content 
+   * @param {string} cwd 
+   * @param {Object} [options] - Write options
+   * @param {boolean} [options.append=false] - If true, appends content instead of overwriting
+   * @throws {Error} If the parent directory doesn't exist or path points to a directory.
+   */
+  writeFile(path, content, cwd = '/', options = { append: false }) {
+    const segments = this.resolvePath(path, cwd);
+    const node = this.getNode(segments);
+    const parentSegments = segments.slice(0, -1);
+    const parent = this.getNode(parentSegments);
+    const name = segments[segments.length - 1];
+
+    if (!parent || parent.type !== 'directory') {
+      throw new Error(`fs: ${path}: Parent directory not found or is not a directory`);
+    }
+
+    if (node) {
+      // File already exists, update content and metadata
+      if (node.type === 'directory') throw new Error(`fs: ${path}: Is a directory`);
+      if (options.append) {
+        node.content += content;
+      } else {
+        node.content = content;
+      }
+      node.metadata.modifiedAt = Date.now();
+    } else {
+      // Create new file node
+      parent.children[name] = this.#createNode('file', name, content);
+    }
+
+    this.#save();
+    return true;
+  }
+
+  /**
+   * Creates a new directory.
+   * @param {string} path 
+   * @param {string} cwd 
+   * @throws {Error} If the entry already exists or parent directory is missing.
+   */
+  createDirectory(path, cwd = '/') {
+    const segments = this.resolvePath(path, cwd);
+    const node = this.getNode(segments);
+    const parentSegments = segments.slice(0, -1);
+    const parent = this.getNode(parentSegments);
+    const name = segments[segments.length - 1];
+
+    if (node) throw new Error(`mkdir: ${path}: File exists`);
+    if (!parent || parent.type !== 'directory') throw new Error(`mkdir: ${path}: Parent directory not found`);
+
+    parent.children[name] = this.#createNode('directory', name);
+    this.#save();
+  }
+
+  /**
+   * Deletes a file or directory.
+   * @param {string} path 
+   * @param {boolean} recursive - Required to delete non-empty directories.
+   * @param {string} cwd 
+   * @throws {Error} If path not found, or directory is not empty and recursive is false.
+   */
+  delete(path, recursive = false, cwd = '/') {
+    const segments = this.resolvePath(path, cwd);
+
+    // Prevent deleting the root
+    if (segments.length === 0) throw new Error(`rm: cannot remove root directory '/'`);
+
+    const node = this.getNode(segments);
+    const parentSegments = segments.slice(0, -1);
+    const parent = this.getNode(parentSegments);
+    const name = segments[segments.length - 1];
+
+    if (!node) throw new Error(`rm: ${path}: No such file or directory`);
+
+    if (node.type === 'directory') {
+      const isEmpty = Object.keys(node.children).length === 0;
+      if (!isEmpty && !recursive) {
+        throw new Error(`rm: ${path}: Directory not empty. Use -r option.`);
+      }
+    }
+
+    delete parent.children[name];
+    this.#save();
+  }
+
+  /**
+   * Gets metadata (stats) for a node.
+   * @param {string} path 
+   * @param {string} cwd 
+   * @returns {{type: string, size: number, createdAt: number, modifiedAt: number, permissions: string}}
+   * @throws {Error} If path is not found.
+   */
+  stat(path, cwd = '/') {
+    const segments = this.resolvePath(path, cwd);
+    const node = this.getNode(segments);
+
+    if (!node) throw new Error(`stat: ${path}: No such file or directory`);
+
+    return {
+      name: node.name,
+      type: node.type,
+      size: node.type === 'file' ? node.content.length : 4096,
+      createdAt: node.metadata.createdAt,
+      modifiedAt: node.metadata.modifiedAt,
+      permissions: node.metadata.permissions
+    };
+  }
+
+  /**
+   * Checks if a path exists.
+   * @param {string} path 
+   * @param {string} cwd 
    * @returns {boolean}
    */
-  exists(path, currentPath = '/') {
-    return this.getType(path, currentPath) !== null;
-  }
-
-  /**
-   * Verifica si una ruta es un directorio.
-   * @param {string} path - Ruta.
-   * @param {string} currentPath - Ruta de trabajo actual.
-   * @returns {boolean}
-   */
-  isDirectory(path, currentPath = '/') {
-    return this.getType(path, currentPath) === 'directory';
-  }
-
-  /**
-   * Verifica si una ruta es un archivo.
-   * @param {string} path - Ruta.
-   * @param {string} currentPath - Ruta de trabajo actual.
-   * @returns {boolean}
-   */
-  isFile(path, currentPath = '/') {
-    return this.getType(path, currentPath) === 'file';
-  }
-
-  /**
-   * Lee el contenido de un archivo.
-   * @param {string} path - Ruta al archivo.
-   * @param {string} currentPath - Ruta de trabajo actual.
-   * @returns {string} Contenido del archivo.
-   * @throws {Error} Si la ruta no existe o no es un archivo.
-   */
-  readFile(path, currentPath = '/') {
-    const parts = this.#resolvePath(currentPath, path);
-    const node = this.#getNode(parts);
-
-    if (!node) {
-      throw new Error(`Path not found: ${path}`);
+  exists(path, cwd = '/') {
+    try {
+      this.stat(path, cwd);
+      return true;
+    } catch {
+      return false;
     }
-    if (node.type !== 'file') {
-      throw new Error(`Not a file: ${path}`);
-    }
-
-    return node.content || '';
-  }
-
-  /**
-   * Lista el contenido de un directorio.
-   * @param {string} path - Ruta al directorio.
-   * @param {string} currentPath - Ruta de trabajo actual.
-   * @returns {string[]} Array de nombres de entradas (archivos y directorios).
-   * @throws {Error} Si la ruta no existe o no es un directorio.
-   */
-  readDir(path, currentPath = '/') {
-    const parts = this.#resolvePath(currentPath, path);
-    const node = this.#getNode(parts);
-
-    if (!node) {
-      throw new Error(`Path not found: ${path}`);
-    }
-    if (node.type !== 'directory') {
-      throw new Error(`Not a directory: ${path}`);
-    }
-
-    // Se usa `node.children` para directorios que no son la raíz
-    const container = node.children || node;
-
-    return Object.keys(container).filter(key =>
-      container[key] && (container[key].type === 'file' || container[key].type === 'directory')
-    );
-  }
-
-  // ** 2. Mutaciones (Crear/Actualizar/Eliminar) **
-
-  /**
-   * Escribe contenido en un archivo (crea si no existe).
-   * @param {string} path - Ruta al archivo.
-   * @param {string} content - Contenido a escribir.
-   * @param {string} currentPath - Ruta de trabajo actual.
-   * @throws {Error} Si el padre no existe o la ruta es un directorio.
-   */
-  writeFile(path, content, currentPath = '/') {
-    const parts = this.#resolvePath(currentPath, path);
-    const { parentNode, name } = this.#getParentNodeAndName(parts);
-
-    if (!parentNode || parentNode.type !== 'directory') {
-      throw new Error(`Parent directory not found or is not a directory for: ${path}`);
-    }
-
-    // Contenedor de children, asegurando que existe para directorios no raíz
-    parentNode.children = parentNode.children || {};
-
-    // Si ya existe, validar que sea un archivo
-    if (parentNode.children[name] && parentNode.children[name].type !== 'file') {
-      throw new Error(`Cannot write to a directory: ${path}`);
-    }
-
-    // Crear o actualizar
-    parentNode.children[name] = { type: 'file', content };
-    this.save();
-  }
-
-  /**
-   * Crea un nuevo directorio.
-   * @param {string} path - Ruta al nuevo directorio.
-   * @param {string} currentPath - Ruta de trabajo actual.
-   * @throws {Error} Si el padre no existe o la entrada ya existe.
-   */
-  createDirectory(path, currentPath = '/') {
-    const parts = this.#resolvePath(currentPath, path);
-    const existingNode = this.#getNode(parts);
-
-    if (existingNode) {
-      throw new Error(`Entry already exists: ${path}`);
-    }
-
-    const { parentNode, name } = this.#getParentNodeAndName(parts);
-
-    if (!parentNode || parentNode.type !== 'directory') {
-      throw new Error(`Parent directory not found or is not a directory for: ${path}`);
-    }
-
-    // Contenedor de children
-    parentNode.children = parentNode.children || {};
-
-    // Crear directorio
-    parentNode.children[name] = { type: 'directory', children: {} };
-    this.save();
-  }
-
-  /**
-   * Elimina un archivo.
-   * @param {string} path - Ruta al archivo.
-   * @param {string} currentPath - Ruta de trabajo actual.
-   * @throws {Error} Si no existe, no es un archivo o es la raíz.
-   */
-  deleteFile(path, currentPath = '/') {
-    const parts = this.#resolvePath(currentPath, path);
-
-    if (parts.length === 0) {
-      throw new Error(`Cannot delete root directory '/'`);
-    }
-
-    const { parentNode, name } = this.#getParentNodeAndName(parts);
-
-    if (!parentNode || !parentNode.children || !parentNode.children[name]) {
-      throw new Error(`Path not found: ${path}`);
-    }
-    if (parentNode.children[name].type !== 'file') {
-      throw new Error(`Not a file: ${path}`);
-    }
-
-    delete parentNode.children[name];
-    this.save();
-  }
-
-  /**
-   * Elimina un directorio.
-   * @param {string} path - Ruta al directorio.
-   * @param {boolean} recursive - Si es true, elimina directorios no vacíos.
-   * @param {string} currentPath - Ruta de trabajo actual.
-   * @throws {Error} Si no existe, no es un directorio, es la raíz o no está vacío y no es recursivo.
-   */
-  deleteDirectory(path, recursive = false, currentPath = '/') {
-    const parts = this.#resolvePath(currentPath, path);
-
-    if (parts.length === 0) {
-      throw new Error(`Cannot delete root directory '/'`);
-    }
-
-    const { parentNode, name } = this.#getParentNodeAndName(parts);
-    const container = parentNode.children;
-
-    if (!parentNode || !container || !container[name]) {
-      throw new Error(`Path not found: ${path}`);
-    }
-
-    const dirNode = container[name];
-
-    if (dirNode.type !== 'directory') {
-      throw new Error(`Not a directory: ${path}`);
-    }
-
-    // Verificar si el directorio está vacío (solo si no es recursivo)
-    const isNotEmpty = dirNode.children && Object.keys(dirNode.children).length > 0;
-    if (!recursive && isNotEmpty) {
-      throw new Error(`Directory not empty: ${path}. Use recursive flag.`);
-    }
-
-    delete container[name];
-    this.save();
-  }
-
-  /**
-       * Resuelve y devuelve la ruta absoluta del directorio padre.
-       * Mantiene la lógica de resolución de '..' y '.' privada.
-       * @param {string} targetPath - La ruta al archivo o directorio.
-       * @param {string} currentPath - La ruta de trabajo actual.
-       * @returns {string} La ruta absoluta del directorio padre.
-       */
-  getParentDirPath(targetPath, currentPath = '/') {
-    // Usa el método core privado para resolver la ruta limpia
-    const parts = this.#resolvePath(currentPath, targetPath);
-
-    // Si es la raíz o equivalente, esto fallará
-    if (parts.length === 0) {
-      return '/'; // Manejar la raíz como su propio padre conceptualmente (o lanzar error)
-    }
-
-    // Elimina el último componente (el nombre del archivo)
-    const parentParts = parts.slice(0, -1);
-
-    // Convierte las partes del padre a una cadena absoluta.
-    return '/' + parentParts.join('/');
   }
 }
-
-
-document.addEventListener('keydown', (e) => {
-  if (e.shiftKey && e.key === 'R' && (e.ctrlKey || e.metaKey)) {
-    localStorage.removeItem(LOCAL_STORAGE_KEY);
-    window.location.reload();
-  }
-});
