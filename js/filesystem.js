@@ -212,7 +212,8 @@ export class FileSystem extends EventTarget {
     if (!node) throw new Error(`ls: ${path}: No such file or directory`);
     if (node.type !== 'directory') throw new Error(`ls: ${path}: Not a directory`);
 
-    return Object.keys(node.children);
+    const childrenNames = Object.keys(node.children);
+    return ['.', '..', ...childrenNames];
   }
 
   /**

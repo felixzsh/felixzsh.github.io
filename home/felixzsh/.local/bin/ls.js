@@ -48,7 +48,7 @@ return {
       return 1;
     }
 
-    const entries = Object.keys(node.children);
+    const entries = fs.readDir(targetPath, cwd);
 
     // Filter hidden files unless -a is specified
     let filteredEntries = entries;
