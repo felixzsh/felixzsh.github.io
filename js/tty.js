@@ -1,4 +1,5 @@
 import { Formatter } from './formatter.js';
+import { LOCAL_STORAGE_KEY } from './filesystem.js';
 
 /**
  * Class managing the Terminal Teletype (TTY) interface.
@@ -13,9 +14,9 @@ export class TTY {
    */
   constructor(terminalElement, outputElement, inputElement, promptPathElement) {
     this.terminalElement = terminalElement;
-    this.output = outputElement;
-    this.input = inputElement;
-    this.promptPath = promptPathElement;
+    this.outputElement = outputElement;
+    this.inputElement = inputElement;
+    this.promptPathElement = promptPathElement;
 
     this.history = [];
     this.historyIndex = 0;
@@ -35,50 +36,70 @@ export class TTY {
 
   init() {
     // Handle keyboard input in the command line
-    this.input.addEventListener('keydown', (e) => this.handleInput(e));
+    this.inputElement.addEventListener('keydown', (e) => this.handleInput(e));
 
-    // Focus the input when clicking anywhere on the document, unless locked or hidden
-    document.addEventListener('click', (e) => {
+    // Focus the input when clicking anywhere in the terminal, unless locked or hidden
+    this.terminalElement.addEventListener('click', (e) => {
       if (!this.inputLocked && this.isVisible) {
-        this.input.focus();
+        this.inputElement.focus();
       }
     });
+
   }
 
   /**
    * Processes keydown events for command execution and history navigation.
-   * @param {KeyboardEvent} e 
+   * @param {KeyboardEvent} e
    */
   handleInput(e) {
     if (this.inputLocked) return;
 
+
+    // Shift + Ctrl/Meta + R
+    if (e.shiftKey && e.key.toLowerCase() === 'r' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+
+      this.lockInput();
+      this.printPromptLine('Ctrl+Shift+R');
+      this.print(Formatter.colorize('Resetting filesystem and reloading page...', 'yellow'));
+
+      console.log("TTY: Resetting Filesystem...");
+      localStorage.removeItem(LOCAL_STORAGE_KEY);
+
+      setTimeout(() => {
+        window.location.reload();
+      }, 100);
+    }
+
     if (e.key === 'Enter') {
-      const commandLine = this.input.value.trim();
+      const commandLine = this.inputElement.value.trim();
       if (commandLine) {
+        this.printPromptLine(commandLine);
         this.history.push(commandLine);
         this.historyIndex = this.history.length;
 
         if (this.commandCallback) {
           this.commandCallback(commandLine);
         }
+        this.scrollToBottom();
       } else {
         this.printPromptLine('');
       }
-      this.input.value = '';
+      this.inputElement.value = '';
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       if (this.historyIndex > 0) {
         this.historyIndex--;
-        this.input.value = this.history[this.historyIndex];
+        this.inputElement.value = this.history[this.historyIndex];
       }
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
       if (this.historyIndex < this.history.length - 1) {
         this.historyIndex++;
-        this.input.value = this.history[this.historyIndex];
+        this.inputElement.value = this.history[this.historyIndex];
       } else {
         this.historyIndex = this.history.length;
-        this.input.value = '';
+        this.inputElement.value = '';
       }
     } else if (e.key === 'Tab') {
       e.preventDefault();
@@ -92,13 +113,13 @@ export class TTY {
   handleTabCompletion() {
     if (!this.tabCompleteCallback) return;
 
-    const currentInput = this.input.value;
+    const currentInput = this.inputElement.value;
     const result = this.tabCompleteCallback(currentInput);
 
     if (!result) return;
 
     if (result.type === 'complete') {
-      this.input.value = result.value;
+      this.inputElement.value = result.value;
     } else if (result.type === 'suggestions') {
       this.printPromptLine(currentInput);
       this.print(result.suggestions.join('  '));
@@ -139,12 +160,12 @@ export class TTY {
 
   lockInput() {
     this.inputLocked = true;
-    this.input.blur();
+    this.inputElement.blur();
   }
 
   unlockInput() {
     this.inputLocked = false;
-    this.input.focus();
+    this.inputElement.focus();
     this.scrollToBottom();
   }
 
@@ -176,7 +197,7 @@ export class TTY {
     const line = document.createElement('div');
     line.className = 'output-line';
     line.innerHTML = content;
-    this.output.appendChild(line);
+    this.outputElement.appendChild(line);
     this.scrollToBottom();
   }
 
@@ -190,7 +211,7 @@ export class TTY {
     const line = document.createElement('div');
     line.className = 'command-line';
     line.innerHTML = `${promptHtml} ${command}`;
-    this.output.appendChild(line);
+    this.outputElement.appendChild(line);
     this.scrollToBottom();
   }
 
@@ -201,12 +222,11 @@ export class TTY {
    */
   updatePrompt(path) {
     let displayPath = path;
-    // Abbreviate home directory
     if (displayPath.startsWith('/home/felixzsh')) {
       displayPath = displayPath.replace('/home/felixzsh', '~');
     }
     if (displayPath === '') displayPath = '~';
-    this.promptPath.textContent = displayPath;
+    this.promptPathElement.textContent = displayPath;
   }
 
   scrollToBottom() {
@@ -214,7 +234,7 @@ export class TTY {
   }
 
   clear() {
-    this.output.innerHTML = '';
+    this.outputElement.innerHTML = '';
   }
 
   printWelcome() {
