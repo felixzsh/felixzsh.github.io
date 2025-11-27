@@ -5,10 +5,16 @@ import { Formatter } from './formatter.js';
 
 function initTerminal() {
 
+  const terminalElement = document.getElementById('terminal');
+  const outputElement = document.getElementById('output');
+  const inputElement = document.getElementById('command-input');
+  const promptPathElement = document.querySelector('#prompt .path');
+
   const tty = new TTY(
-    document.getElementById('output'),
-    document.getElementById('command-input'),
-    document.querySelector('.path')
+    terminalElement,
+    outputElement,
+    inputElement,
+    promptPathElement
   );
 
   const filesystem = new FileSystem();
@@ -16,12 +22,12 @@ function initTerminal() {
   const shell = new Shell(tty, filesystem);
 
   tty.onCommand((commandLine) => {
-    shell.execute(commandLine);
+    shell.exec(commandLine);
   });
 
-  tty.onTabComplete((currentInput) => {
-    return shell.getCompletions(currentInput);
-  });
+  // tty.onTabComplete((currentInput) => {
+  //   return shell.getCompletions(currentInput);
+  // });
 
   tty.printWelcome();
 
