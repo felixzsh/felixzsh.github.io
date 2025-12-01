@@ -1,9 +1,17 @@
 import { Formatter } from './formatter.js';
 import { AutocompletionHandler } from './autocompletion.js';
-import { SimpleSyncStream } from './stream.js'; // Assuming you saved your class here
-import { CommandParser } from './command-parser.js';
+import { SimpleSyncStream } from './stream.js';
+import { PipelineParser, RedirectionResolver } from './command-parser.js';
 
+/**
+ * Shell class to manage the command execution environment,
+ * including environment variables, aliases, TTY interaction, and pipeline orchestration.
+ */
 export class Shell {
+  /**
+   * @param {object} tty - The TTY interface object (for I/O and prompt).
+   * @param {object} filesystem - The file system interface object.
+   */
   constructor(tty, filesystem) {
     this.tty = tty;
     this.fs = filesystem;
@@ -34,7 +42,7 @@ export class Shell {
     this.tty.onTabComplete(this.getCompletionsCallback);
   }
 
-  // --- Environment Getters/Setters (Same) ---
+  // --- Environment Getters/Setters ---
   get currentPath() { return this.env.PWD; }
   set currentPath(path) {
     this.env.PWD = path;
@@ -47,33 +55,17 @@ export class Shell {
 
 
   // ==========================================================================
-  //                        PUBLIC EXECUTION API
+  // PUBLIC EXECUTION API
   // ==========================================================================
 
   /**
-   * 1. HANDLE USER INPUT: Entry point from TTY (Visual).
-   * Prints what happens on screen.
-   */
-  handleUserInput(commandLine) {
-    this.tty.printPromptLine(commandLine);
-    if (!commandLine.trim()) return;
-
-    // Execute the pipeline connecting the final output to the TTY print function
-    this.#executePipeline(commandLine, {
-      stdout: (data) => this.tty.print(data),
-      stderr: (data) => this.tty.print(Formatter.error(data))
-    });
-
-    this.tty.scrollToBottom();
-  }
-
-  /**
-   * 2. EXEC: Programmatic "Visual" Execution (For scripts that want to print).
-   * Behaves the same as if the user typed it, but from code.
+   * EXEC: Programmatic "Visual" Execution (For scripts that want to print).
+   * Behaves the same as if the user typed it, with visible side effects on the TTY.
+   * @param {string} commandLine - The full command string.
+   * @returns {{code: number}} The exit code of the last command in the pipeline.
    */
   exec(commandLine) {
-    // By default prints to TTY, unless otherwise specified in arguments
-    // but here we assume the standard "exec" behavior = visible side effects.
+    // Uses the TTY's print function for stdout, and formatted error for stderr.
     return this.#executePipeline(commandLine, {
       stdout: (data) => this.tty.print(data),
       stderr: (data) => this.tty.print(Formatter.error(data))
@@ -81,119 +73,116 @@ export class Shell {
   }
 
   /**
-   * 3. RUN: Programmatic "Silent" Execution (For variables/capture).
+   * RUN: Programmatic "Silent" Execution (For variables/capture).
    * Equivalent to $(cmd) in Bash. Returns the result string.
+   * @param {string} commandLine - The full command string.
+   * @returns {{output: string, code: number}} The captured output and the exit code.
    */
   run(commandLine) {
-    // Create a stream that accumulates in memory (without destination function)
     const captureStream = new SimpleSyncStream();
-
     const result = this.#executePipeline(commandLine, {
-      stdout: captureStream,
-      // stderr generally we want to see it if it fails, or you could capture it too
+      stdout: captureStream.write.bind(captureStream), // Use the stream's write method
       stderr: (data) => console.error(`[Script Error] ${data}`)
     });
 
-    // Return the object with the output read from the buffer
     return {
-      output: captureStream.read(), // Read the accumulated data
+      output: captureStream.read(),
       code: result.code
     };
   }
 
 
   // ==========================================================================
-  //                        PIPELINE ORCHESTRATOR (PRIVATE)
+  // PIPELINE ORCHESTRATOR (PRIVATE)
   // ==========================================================================
 
   /**
-   * The heart of the system. Parses '|', '>', '>>' and connects the streams.
-   * @param {string} fullCommandLine - Complete line (e.g.: "ls | grep js > file.txt")
-   * @param {object} finalDestinations - { stdout, stderr } Final destinations of the last command
+   * Orchestrates the execution of a command pipeline (commands separated by '|').
+   * It manages command splitting, I/O redirection, and piping data between stages.
+   * @param {string} fullCommandLine - The complete line of commands.
+   * @param {object} finalDestinations - Functions for the final stdout and stderr.
+   * @returns {{code: number}} The exit code of the last command executed.
    */
   #executePipeline(fullCommandLine, finalDestinations) {
-    const commands = CommandParser.parse(fullCommandLine);
+    const commandStrings = PipelineParser.parse(fullCommandLine);
 
-    // pipeData: Es la "pelota" que se pasan los comandos.
-    // Al principio está vacía. Si hay un pipe, se llena con el resultado.
-    let pipeData = '';
+    let pipeData = ''; // Data flowing from the previous command's stdout to the next command's stdin
     let lastExitCode = 0;
 
-    for (let i = 0; i < commands.length; i++) {
-      const cmd = commands[i];
-      const isLast = i === commands.length - 1;
+    for (let i = 0; i < commandStrings.length; i++) {
+      const cmdStr = commandStrings[i];
+      const isLast = i === commandStrings.length - 1;
 
-      // 1. PREPARAR ENTRADA (STDIN)
-      // ---------------------------
-      const stdinStream = new SimpleSyncStream();
+      // STDIN defaults to the data piped from the previous command, or an empty string.
+      const defaultStdin = pipeData || '';
 
-      if (cmd.input) {
-        // Caso: Redirección explícita "< archivo.txt" (Gana sobre el pipe)
-        try {
-          const fileContent = this.fs.readFile(cmd.input, this.currentPath);
-          stdinStream.write(fileContent); // Llenamos el stream
-        } catch (e) {
-          finalDestinations.stderr(`bash: ${cmd.input}: No such file or directory`);
-          return { code: 1 };
-        }
-      } else if (pipeData) {
-        // Caso: Viene info del comando anterior (Pipe)
-        stdinStream.write(pipeData);
+      // STDOUT defaults to a pipe stream if it's not the last command,
+      // otherwise it defaults to the final destination (TTY or capture stream).
+      const defaultStdout = isLast ? finalDestinations.stdout : new SimpleSyncStream();
+
+      // STDERR always defaults to the final destination (TTY or console.error).
+      const defaultStderr = finalDestinations.stderr;
+
+      // 1. Resolve redirections for the current command
+      const resolved = RedirectionResolver.resolve(
+        cmdStr,
+        { stdin: defaultStdin, stdout: defaultStdout, stderr: defaultStderr },
+        this.fs,
+        this.currentPath
+      );
+
+      if (resolved.error) {
+        return { code: resolved.code };
       }
 
-      // 2. PREPARAR SALIDA (STDOUT)
-      // ---------------------------
-      // Por defecto, escribimos a un buffer temporal para capturar la salida
-      // y decidir luego si se la pasamos al siguiente comando o la imprimimos.
-      const stdoutStream = new SimpleSyncStream();
+      const { command, streams } = resolved;
 
-      // El stderr va directo a pantalla siempre en esta versión simple
-      const stderrStream = new SimpleSyncStream(finalDestinations.stderr);
+      // Prepare STDIN stream (used by the command implementation)
+      const stdinContent = streams.stdin;
+      const stdinStream = new SimpleSyncStream();
+      if (stdinContent) stdinStream.write(stdinContent);
 
-      // 3. EJECUTAR COMANDO
-      // -------------------
-      // Reconstruimos "cmd args" para tu método executeSingleCommand
-      const cmdStr = [cmd.args[0], ...cmd.args.slice(1)].join(' ');
+      // Stream to capture all STDOUT data from the current command
+      const captureStream = new SimpleSyncStream();
 
-      // Ejecutamos (pasándole nuestros streams preparados)
-      const result = this.#executeSingleCommand(cmdStr, {
+      // Wrapper function for STDOUT: captures data for piping/final output AND writes to the final resolved stream (file/FD)
+      const finalStdoutWriter = (data) => {
+        captureStream.write(data); // Capture for pipe/final output
+        if (typeof streams.stdout === 'function') {
+          streams.stdout(data); // Write to the resolved destination (e.g., file or TTY for the last command)
+        }
+      };
+
+      // Wrapper function for STDERR: writes to the final resolved stream (file/FD)
+      const finalStderrWriter = (data) => {
+        if (typeof streams.stderr === 'function') {
+          streams.stderr(data);
+        } else {
+          // If stderr was redirected to a stream object (e.g., SimpleSyncStream for a file)
+          streams.stderr.write(data);
+        }
+      };
+
+      // 2. Execute the single command
+      const result = this.#executeSingleCommand(command.name, {
         stdin: stdinStream,
-        stdout: stdoutStream,
-        stderr: stderrStream
-      }, cmd.args); // Pasamos args ya parseados para optimizar
+        stdout: { write: finalStdoutWriter },
+        stderr: { write: finalStderrWriter }
+      }, [command.name, ...command.args]);
 
       lastExitCode = result.code;
+      if (lastExitCode !== 0) break; // Stop pipeline execution on error
 
-      // Si el comando falló, detenemos la cadena (comportamiento habitual &&, 
-      // aunque en pipes bash suele seguir, para demo web mejor parar si hay error)
-      if (lastExitCode !== 0) break;
-
-      // 4. GESTIONAR RESULTADO (¿A dónde va lo que salió?)
-      // --------------------------------------------------
-      const outputCaptured = stdoutStream.read(); // Leemos lo que el comando escupió
-
-      if (cmd.output) {
-        // Caso A: Redirección a archivo (> ó >>)
-        try {
-          if (cmd.mode === 'append') {
-            this.fs.appendFile(cmd.output, outputCaptured, this.currentPath);
-          } else {
-            this.fs.writeFile(cmd.output, outputCaptured, this.currentPath);
-          }
-          pipeData = ''; // Si va a archivo, no sigue por el pipe
-        } catch (e) {
-          finalDestinations.stderr(`Error writing to ${cmd.output}`);
+      // 3. Prepare data for the next command (piping)
+      if (typeof streams.stdout !== 'function') {
+        const outputCaptured = captureStream.read();
+        if (!isLast) {
+          pipeData = outputCaptured;
+        } else {
+          // If the last command's STDOUT was redirected to an internal stream (e.g., SimpleSyncStream
+          // due to a file redirection), we need to manually write its content to the final destination (TTY/capture).
+          finalDestinations.stdout(outputCaptured);
         }
-      }
-      else if (!isLast) {
-        // Caso B: Hay un pipe después (|)
-        // Guardamos la salida para que sea la entrada del siguiente loop
-        pipeData = outputCaptured;
-      }
-      else {
-        // Caso C: Es el último comando y no hay archivo
-        // Imprimimos en la pantalla real
-        finalDestinations.stdout(outputCaptured);
       }
     }
 
@@ -201,14 +190,18 @@ export class Shell {
   }
 
   /**
-   * Ejecuta un comando individual.
-   * Modificado ligeramente para aceptar args pre-procesados.
+   * Executes a single command, handling argument parsing, alias resolution,
+   * command loading, and execution within the defined context.
+   * @param {string} commandStr - The raw command string (used mainly for alias expansion).
+   * @param {object} streams - The resolved input/output streams for this command.
+   * @param {Array<string>} parsedArgs - The command name and arguments list.
+   * @returns {{code: number}} The command's exit code.
    */
   #executeSingleCommand(commandStr, streams, parsedArgs) {
     const cmdName = parsedArgs[0];
     const rawArgs = parsedArgs.slice(1);
 
-    // Parseo básico de banderas (flags)
+    // Basic flag parsing
     const options = {};
     const args = [];
 
@@ -218,13 +211,10 @@ export class Shell {
       else args.push(arg);
     });
 
-    // Alias (Simplificado)
+    // Alias resolution (Simple recursion)
     if (this.aliases[cmdName]) {
-      // Nota: Para una demo simple, a veces es mejor resolver el alias 
-      // antes de entrar a esta función, pero esto funciona para alias simples.
       const aliasParts = this.aliases[cmdName].split(' ');
-      // Recursividad simple: llamamos de nuevo con el string expandido
-      // Cuidado con bucles infinitos en alias
+      // Simple recursion: call again with the expanded string
       return this.#executeSingleCommand(
         this.aliases[cmdName] + ' ' + rawArgs.join(' '),
         streams,
@@ -232,12 +222,14 @@ export class Shell {
       );
     }
 
+    // Load command definition
     const cmdDef = this.loadCommand(cmdName);
     if (!cmdDef) {
       streams.stderr.write(`${cmdName}: command not found`);
       return { code: 127 };
     }
 
+    // Build the execution context for the command
     const context = {
       shell: this,
       fs: this.fs,
@@ -245,28 +237,55 @@ export class Shell {
       cwd: this.currentPath,
       args: args,
       options: options,
-      stdin: streams.stdin,   // El comando leerá de aquí con stdin.read()
-      stdout: streams.stdout, // El comando escribirá aquí con stdout.write()
+      stdin: streams.stdin,  // Command will read from here using stdin.read()
+      stdout: streams.stdout, // Command will write here using stdout.write()
       stderr: streams.stderr
     };
 
+    // Execute command and handle errors
     try {
-      const exitCode = cmdDef.execute(args, context, options);
+      const exitCode = cmdDef.execute(context);
       return { code: exitCode === undefined ? 0 : exitCode };
     } catch (err) {
       streams.stderr.write(`Error: ${err.message}`);
       return { code: 1 };
     }
   }
-  // --- Command Loading (Same) ---
+
+  /**
+   * Loads the command definition from the file system by checking the PATH environment variable.
+   * It uses `this.fs.stat` to verify the file exists and is a file.
+   * @param {string} name - The name of the command to load.
+   * @returns {object|null} The command definition object with an `execute` method, or null if not found/loaded.
+   */
   loadCommand(name) {
     const binPath = this.getEnv('PATH');
+    // Assuming binPath is an absolute path, so the final path is also absolute.
     const commandFilePath = `${binPath}/${name}.js`;
 
-    if (!this.fs.isFile(commandFilePath)) return null;
 
+    console.log(`command file path ${commandFilePath}`);
+
+    // 1. Check if the file exists and is a file (using stat)
     try {
-      const content = this.fs.readFile(commandFilePath);
+      // Use '/' as CWD for absolute paths
+      const stats = this.fs.stat(commandFilePath, '/');
+      if (stats.type !== 'file') {
+        return null;
+      }
+    } catch (e) {
+      console.log(`file doesn't exist: ${e}`);
+      // File does not exist or path is invalid
+      return null;
+    }
+
+    // 2. Read the file content and execute the code
+    try {
+      // Read content, using '/' as CWD for the absolute path
+      const content = this.fs.readFile(commandFilePath, '/');
+
+      // Execute the command code to get the command object
+      // The content is expected to be a function that returns the command definition object.
       const cmdFactory = new Function('context', content);
       return cmdFactory({});
     } catch (e) {
@@ -278,10 +297,3 @@ export class Shell {
   // Autocompletion (Callback)
   getCompletionsCallback = (input) => this.autoCompleter.handleCompletion(input);
 }
-
-
-
-
-
-
-
