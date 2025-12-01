@@ -55,7 +55,12 @@ export class AutocompletionHandler {
 
   #getCommandCandidates(token) {
     const binPath = this.getBinPath();
-    if (!this.fs.isDirectory(binPath)) return [];
+    try {
+      const stats = this.fs.stat(binPath, '/');
+      if (stats.type !== 'directory') return [];
+    } catch (e) {
+      return [];
+    }
 
     const files = this.fs.readDir(binPath) || [];
 
@@ -77,8 +82,14 @@ export class AutocompletionHandler {
     // 2. Resolver ruta absoluta del directorio a buscar
     const targetDirPath = searchDir === '.' ? cwd : searchDir;
 
-    // Nota: usamos 'cwd' como contexto si 'searchDir' es relativo
-    if (!this.fs.isDirectory(targetDirPath, cwd)) return [];
+    let targetDirStats;
+    try {
+      // MODIFICACIÓN 1/2: Verificar si la ruta es un directorio usando stat
+      targetDirStats = this.fs.stat(targetDirPath, cwd);
+      if (targetDirStats.type !== 'directory') return [];
+    } catch (e) {
+      return []; // El directorio no existe
+    }
 
     let entries;
     try {
@@ -91,13 +102,19 @@ export class AutocompletionHandler {
     return entries
       .filter(name => name.startsWith(searchTerm))
       .map(name => {
-        // Usamos la primitiva #resolvePath del FS (asumiendo que es privada, 
-        // si la hiciste pública úsala, si no, hay que calcular la ruta resuelta)
-        const fullPath = `${targetDirPath}/${name}`;
-        const isDir = this.fs.isDirectory(fullPath, cwd);
+        const prefix = hasSlash ? (token.slice(0, lastSlash + 1)) : '';
+
+        // MODIFICACIÓN 2/2: Verificar si la entrada es un directorio
+        const fullPath = this.fs.resolvePath(`${targetDirPath}/${name}`, cwd).join('/');
+
+        let isDir = false;
+        try {
+          isDir = this.fs.stat(fullPath, '/').type === 'directory';
+        } catch (e) {
+          // Si stat falla, asumimos que no es un directorio (o es un archivo huérfano, etc.)
+        }
 
         // Retornamos la parte que completa al token original
-        const prefix = hasSlash ? (token.slice(0, lastSlash + 1)) : '';
         return prefix + name + (isDir ? '/' : ' ');
       });
   }
