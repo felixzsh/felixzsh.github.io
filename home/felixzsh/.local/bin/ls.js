@@ -97,4 +97,4 @@ return {
     }
     return 0;
   }
-};
+}

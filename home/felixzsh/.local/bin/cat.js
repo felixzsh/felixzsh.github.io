@@ -1,8 +1,9 @@
 // Content for /bin/cat.js
 return {
   description: 'Concatenate files and print on the standard output.',
-  execute: (args, context) => {
+  execute: (context) => {
     const { fs, cwd, stdin, stdout, stderr } = context;
+    const { args } = context;
     let exitCode = 0;
 
     if (args.length > 0) {
