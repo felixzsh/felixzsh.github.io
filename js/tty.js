@@ -190,15 +190,30 @@ export class TTY {
   }
 
   /**
-   * Print content to terminal output area.
+   * Write content to terminal output area without creating a new line.
+   * @param {string} content - HTML content to write.
+   */
+  write(content) {
+    let lastLine = this.outputElement.lastElementChild;
+    
+    // If there's no last line or the last line is not an output line, create a new one
+    if (!lastLine || !lastLine.classList.contains('output-line')) {
+      lastLine = document.createElement('div');
+      lastLine.className = 'output-line';
+      this.outputElement.appendChild(lastLine);
+    }
+    
+    // Append content to the existing line
+    lastLine.innerHTML += content;
+    this.scrollToBottom();
+  }
+
+  /**
+   * Print content to terminal output area (creates a new line).
    * @param {string} content - HTML content to print.
    */
   print(content) {
-    const line = document.createElement('div');
-    line.className = 'output-line';
-    line.innerHTML = content;
-    this.outputElement.appendChild(line);
-    this.scrollToBottom();
+    this.write(content);
   }
 
   /**
