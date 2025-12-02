@@ -1,7 +1,8 @@
 return {
     description: 'Clear terminal output',
-    execute: (args, context) => {
-        context.shell.tty.clear();
-        return '';
+    execute: (context) => {
+        const { shell } = context;
+        shell.tty.clear();
+        return 0;
     }
 };

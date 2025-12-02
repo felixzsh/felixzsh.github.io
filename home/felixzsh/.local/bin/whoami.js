@@ -1,10 +1,13 @@
 return {
   description: 'Print user identity',
-  execute: (args, context) => {
-    const aboutNode = context.fs.getNode(['home', context.env.USER || 'felixzsh', 'about.md']);
+  execute: (context) => {
+    const { fs, env, stdout } = context;
+    const aboutNode = fs.getNode(['home', env.USER || 'felixzsh', 'about.md']);
     if (aboutNode && aboutNode.content) {
-      return context.stdout(aboutNode.content);
+      stdout.write(aboutNode.content);
+      return 0;
     }
-    return context.env.USER || 'felixzsh';
+    stdout.write(env.USER || 'felixzsh');
+    return 0;
   }
 };

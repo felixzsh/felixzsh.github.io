@@ -1,10 +1,12 @@
 // Contenido para /bin/touch.js
 return {
   description: "Create a new, empty file or update the timestamp (simple implementation).",
-  execute: (args, context, options) => {
+  execute: (context) => {
     const { fs, cwd, stdout, stderr } = context;
+    const { args, options } = context;
+    
     if (args.length === 0 || options.help) {
-      stdout.write("Usage: touch <file_name>\n\nCreate a new file or update timestamp (simple implementation).\n");
+      stdout.write("Usage: touch &lt;file_name&gt;\n\nCreate a new file or update timestamp (simple implementation).\n");
       return 0;
     }
     const filePath = args[0];
@@ -12,7 +14,7 @@ return {
       fs.writeFile(filePath, "", cwd);
       return 0;
     } catch (e) {
-      stderr.write(`touch: cannot touch '${filePath}': ${e.message}\n`);
+      stderr.write(`touch: ${e.message}\n`);
       return 1;
     }
   }

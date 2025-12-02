@@ -14,7 +14,7 @@ return {
     let hasBeenWritten = false; // Tracks if ':w' has been executed at least once
 
     if (args.length === 0 || options.help) {
-      stdout.write("Usage: vim <file_name>\n\nEdits a file in the virtual filesystem.\n");
+      stdout.write("Usage: vim &lt;file_name&gt;\n\nEdits a file in the virtual filesystem.\n");
       return 0;
     }
 
@@ -143,6 +143,6 @@ return {
       }, 150);
     });
 
-    return null;
+    return 0;
   }
 };

@@ -18,14 +18,17 @@ function listProjects(node, path, indent = '') {
 
 return {
     description: 'View my projects',
-    execute: (args, context) => {
-        const projectNode = context.fs.getNode(['home', context.env.USER || 'felixzsh', 'projects']);
+    execute: (context) => {
+        const { fs, env, stdout } = context;
+        const projectNode = fs.getNode(['home', env.USER || 'felixzsh', 'projects']);
         if (projectNode) {
             let output = 'My Projects:\n\n';
-            output += listProjects(projectNode, `${context.env.HOME}/projects`);
-            output += '\nUse <span class="md-code">cat projects/<category>/<project>.md</span> to read details.';
-            return output;
+            output += listProjects(projectNode, `${env.HOME}/projects`);
+            output += '\nUse <span class="md-code">cat projects/&lt;category&gt;/&lt;project&gt;.md</span> to read details.\n';
+            stdout.write(output);
+            return 0;
         }
-        return 'No projects found.';
+        stdout.write('No projects found.\n');
+        return 1;
     }
 };

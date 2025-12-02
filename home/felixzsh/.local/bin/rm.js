@@ -8,11 +8,14 @@ return {
     
     let exitCode = 0;
     
-    // If no arguments provided, show usage
-    if (args.length === 0) {
-      stderr.write('rm: missing operand\n');
-      stderr.write('Try \'rm --help\' for more information.\n');
-      return 1;
+    // If no arguments provided or --help is specified, show usage
+    if (args.length === 0 || options.help) {
+      stdout.write("Usage: rm &lt;file_or_directory&gt;\n\nRemove files or directories.\n");
+      stdout.write("Options:\n");
+      stdout.write("  -r, -R    Remove directories and their contents recursively\n");
+      stdout.write("  -f        Force removal without prompting\n");
+      stdout.write("  --help    Show this help message\n");
+      return 0;
     }
     
     // Check for conflicting options

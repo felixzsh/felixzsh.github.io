@@ -1,10 +1,13 @@
 return {
     description: 'Get contact information',
-    execute: (args, context) => {
-        const contactNode = context.fs.getNode(['home', context.env.USER || 'felixzsh', 'contact.md']);
+    execute: (context) => {
+        const { fs, env, stdout } = context;
+        const contactNode = fs.getNode(['home', env.USER || 'felixzsh', 'contact.md']);
         if (contactNode && contactNode.content) {
-            return context.stdout(contactNode.content);
+            stdout.write(contactNode.content);
+            return 0;
         }
-        return 'Contact info missing.';
+        stdout.write('Contact info missing.');
+        return 1;
     }
 };

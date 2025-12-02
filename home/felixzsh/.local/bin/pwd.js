@@ -1,6 +1,8 @@
 return {
     description: 'Print working directory',
-    execute: (args, context) => {
-        return context.cwd;
+    execute: (context) => {
+        const { cwd, stdout } = context;
+        stdout.write(cwd + '\n');
+        return 0;
     }
 };

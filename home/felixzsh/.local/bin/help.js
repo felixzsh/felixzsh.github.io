@@ -1,11 +1,13 @@
 return {
     description: 'List available commands',
-    execute: (args, context) => {
-        const binPath = ['home', context.env.USER || 'felixzsh', '.local', 'bin'];
-        const binNode = context.fs.getNode(binPath);
+    execute: (context) => {
+        const { fs, env, stdout } = context;
+        const binPath = ['home', env.USER || 'felixzsh', '.local', 'bin'];
+        const binNode = fs.getNode(binPath);
 
         if (!binNode || !binNode.children) {
-            return 'Error: .local/bin not found.';
+            stdout.write('Error: .local/bin not found.\n');
+            return 1;
         }
 
         let output = 'Available commands:\n\n';
@@ -29,7 +31,8 @@ return {
             }
         }
 
-        output += '\nType <span class="md-code">help</span> to see this list again.';
-        return output;
+        output += '\nType <span class="md-code">help</span> to see this list again.\n';
+        stdout.write(output);
+        return 0;
     }
 };
