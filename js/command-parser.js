@@ -39,7 +39,7 @@ export class RedirectionResolver {
     // 1. Optional FD: (\d*)
     // 2. Operator: (>|>>|<|<>)
     // 3. Target (can be &FD or a path): (&?\S+)
-    const REDIRECT_REGEX = /(\d*)(>|>>|<|<>)\s*(&?\S+)/g;
+    const REDIRECT_REGEX = /(\d*)(<>|>>|>|<)\s*(&?\S+)/g;
 
     const redirections = [];
     const cleanArgs = [];
@@ -49,14 +49,14 @@ export class RedirectionResolver {
     // Iterate through the string searching for all redirections
     while ((match = REDIRECT_REGEX.exec(commandStr)) !== null) {
 
-      // 1. Capture the part of the command that is not a redirection (before the match)
+
+
       const preMatchPart = commandStr.substring(lastIndex, match.index).trim();
       if (preMatchPart) {
         // Add arguments found before the redirection
         cleanArgs.push(...preMatchPart.split(/\s+/).filter(a => a.length > 0));
       }
 
-      // 2. Process the redirection
       const fd = match[1] ? parseInt(match[1], 10) : (match[2] === '<' ? DEFAULT_FD_STDIN : DEFAULT_FD_STDOUT);
       const operator = match[2];
       const target = match[3];
@@ -66,11 +66,9 @@ export class RedirectionResolver {
       let targetFD = null;
 
       if (target.startsWith('&')) {
-        // Case: Redirection by reference to FD (2>&1)
         type = 'redirectFD';
         targetFD = parseInt(target.substring(1), 10);
       } else {
-        // Case: Redirection to file
         type = 'toFile';
         targetPath = target;
         if (operator === '>') mode = 'overwrite';
@@ -91,13 +89,11 @@ export class RedirectionResolver {
       lastIndex = match.index + match[0].length;
     }
 
-    // 3. Capture remaining arguments (after the last match)
     const remainingArgs = commandStr.substring(lastIndex).trim();
     if (remainingArgs) {
       cleanArgs.push(...remainingArgs.split(/\s+/).filter(a => a.length > 0));
     }
 
-    // The first argument is the command name
     const commandName = cleanArgs.shift();
 
     return {
@@ -133,14 +129,8 @@ export class RedirectionResolver {
         try {
           let fileContent = '';
           if (redir.mode === 'append') {
-            // For >>, we need to read the current content to concatenate
-            try {
-              fileContent = fs.readFile(redir.path, currentPath);
-            } catch {
-              fileContent = ''; // File does not exist, start empty
-            }
-            // The stream now points to the writing/concatenation function
-            fdContext[redir.fd] = (data) => fs.writeFile(redir.path, fileContent + data, currentPath);
+            // For >>, append to the file
+            fdContext[redir.fd] = (data) => fs.writeFile(redir.path, data, currentPath, { append: true });
           } else if (redir.mode === 'overwrite') {
             // For >: Overwrite. The stream points to the direct writing function
             fdContext[redir.fd] = (data) => fs.writeFile(redir.path, data, currentPath);
