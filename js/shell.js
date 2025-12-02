@@ -19,7 +19,6 @@ export class Shell {
     this.env = {
       'HOME': '/home/felixzsh',
       'USER': 'felixzsh',
-      'SHELL': '/bin/bash',
       'PWD': '/home/felixzsh',
       'PATH': '/home/felixzsh/.local/bin',
       'HOSTNAME': 'portfolio'
@@ -114,7 +113,7 @@ export class Shell {
       const isLast = i === commandStrings.length - 1;
 
       // STDIN defaults to the data piped from the previous command, or an empty string.
-      const defaultStdin = pipeData || '';
+      const defaultStdin = pipeData;
 
       // STDOUT defaults to a pipe stream if it's not the last command,
       // otherwise it defaults to the final destination (TTY or capture stream).
@@ -140,7 +139,15 @@ export class Shell {
       // Prepare STDIN stream (used by the command implementation)
       const stdinContent = streams.stdin;
       const stdinStream = new SimpleSyncStream();
-      if (stdinContent) stdinStream.write(stdinContent);
+      if (stdinContent) {
+        stdinStream.write(stdinContent);
+      } else {
+        // No stdin provided - provide informative message about TTY stdin limitations
+        stdinStream.write(
+          "Interactive TTY stdin is not supported in this browser-based terminal.\n" +
+          "I just want to keep all $PATH scripts simple and dont be async. \n"
+        );
+      }
 
       // Stream to capture all STDOUT data from the current command
       const captureStream = new SimpleSyncStream();
@@ -293,7 +300,6 @@ export class Shell {
       return null;
     }
   }
-
   // Autocompletion (Callback)
   getCompletionsCallback = (input) => this.autoCompleter.handleCompletion(input);
 }
