@@ -1,12 +1,12 @@
 /**
- * Módulo especializado en la lógica de autocompletado de comandos y rutas.
+ * Specialized module for command and path autocompletion logic.
  */
 export class AutocompletionHandler {
 
   /**
-   * @param {FileSystem} fs - Instancia del sistema de archivos.
-   * @param {function(): string} getCurrentPath - Función para obtener el directorio de trabajo actual.
-   * @param {function(): string} getBinPath - Función para obtener la ruta de binarios (PATH).
+   * @param {FileSystem} fs - Instance of the file system interface.
+   * @param {function(): string} getCurrentPath - Function to get the current working directory.
+   * @param {function(): string} getBinPath - Function to get the path where executables (commands) are located (like $PATH).
    */
   constructor(fs, getCurrentPath, getBinPath) {
     this.fs = fs;
@@ -15,13 +15,17 @@ export class AutocompletionHandler {
   }
 
   /**
-   * Punto de entrada principal para el TTY.
-   * @param {string} currentInput - Cadena de entrada actual.
-   * @returns {object|null} Resultado de autocompletado ({ type, value/suggestions }).
+   * Main entry point for TTY autocompletion.
+   * @param {string} currentInput - The current input string entered by the user.
+   * @returns {object|null} The autocompletion result:
+   * - `{ type: 'complete', value: string }` for a direct single match.
+   * - `{ type: 'suggestions', suggestions: string[] }` for multiple matches.
+   * - `null` if no matches are found.
    */
   handleCompletion(currentInput) {
     const { isCommand, token, prefix } = this.#parseCompletionContext(currentInput);
 
+    // Determine if we're completing a command name or a file/directory path
     const candidates = isCommand
       ? this.#getCommandCandidates(token)
       : this.#getPathCandidates(token);
@@ -29,33 +33,49 @@ export class AutocompletionHandler {
     if (candidates.length === 0) return null;
 
     if (candidates.length === 1) {
-      // Autocompletar: Usar el prefijo original + el candidato
+      // Autocomplete: Use the original prefix + the candidate's completion
       return { type: 'complete', value: prefix + candidates[0] };
     } else {
-      // Sugerencias: Mostrar solo el nombre final, eliminando el prefijo de ruta
+      // Suggestions: Show only the final name, removing the path prefix for cleaner display
       const suggestions = candidates.map(c => c.split('/').pop());
       return { type: 'suggestions', suggestions: suggestions };
     }
   }
 
   // --------------------------------------------------------------------------
-  //                              MÉTODOS PRIVADOS (Core Logic)
+  //                             PRIVATE METHODS (Core Logic)
   // --------------------------------------------------------------------------
 
+  /**
+   * Analyzes the input string to determine the context of autocompletion.
+   * @param {string} input - The full current input string.
+   * @returns {{isCommand: boolean, token: string, prefix: string}} Completion context.
+   */
   #parseCompletionContext(input) {
     const parts = input.split(/\s+/);
     const isNewArg = input.endsWith(' ');
 
+    // Completion context:
+    // 1. Is it the very first token AND not followed by a space? -> Command completion
     const isCommand = parts.length === 1 && !isNewArg;
+    // 2. The token to be completed (empty string if input ends with a space)
     const token = isNewArg ? '' : parts[parts.length - 1];
+    // 3. The input part before the token (used to reconstruct the full completed line)
     const prefix = input.substring(0, input.length - token.length);
 
     return { isCommand, token, prefix };
   }
 
+  /**
+   * Finds matching command candidates based on the token prefix.
+   * Commands are files ending in '.js' in the bin directory.
+   * @param {string} token - The prefix to match against command names.
+   * @returns {string[]} An array of potential command completions.
+   */
   #getCommandCandidates(token) {
     const binPath = this.getBinPath();
     try {
+      // Ensure the bin path exists and is a directory
       const stats = this.fs.stat(binPath, '/');
       if (stats.type !== 'directory') return [];
     } catch (e) {
@@ -66,55 +86,67 @@ export class AutocompletionHandler {
 
     return files
       .filter(f => f.endsWith('.js') && f.startsWith(token))
-      .map(f => f.replace('.js', ' ')); // Agrega espacio para separar del siguiente argumento
+      // Replace '.js' with a space ' ' to separate the command name from the next argument
+      .map(f => f.replace('.js', ' '));
   }
 
+  /**
+   * Finds matching file/directory path candidates based on the token.
+   * Handles relative, absolute, and path segments within the token.
+   * @param {string} token - The path segment (or full path) to match.
+   * @returns {string[]} An array of potential path completions.
+   */
   #getPathCandidates(token) {
     const cwd = this.getCurrentPath();
 
-    // 1. Separar directorio base y término de búsqueda
+    // 1. Separate base directory and search term
     const lastSlash = token.lastIndexOf('/');
     const hasSlash = lastSlash !== -1;
 
+    // Determine the directory to search in (if no slash, search in '.')
     const searchDir = hasSlash ? token.slice(0, lastSlash) : '.';
+    // Determine the name prefix to match against entries
     const searchTerm = hasSlash ? token.slice(lastSlash + 1) : token;
 
-    // 2. Resolver ruta absoluta del directorio a buscar
+    // 2. Resolve the absolute path of the directory to search
+    // If searchDir is '.', targetDirPath is the current working directory (cwd)
     const targetDirPath = searchDir === '.' ? cwd : searchDir;
 
     let targetDirStats;
     try {
-      // MODIFICACIÓN 1/2: Verificar si la ruta es un directorio usando stat
+      // Check if the target path is a valid directory
       targetDirStats = this.fs.stat(targetDirPath, cwd);
       if (targetDirStats.type !== 'directory') return [];
     } catch (e) {
-      return []; // El directorio no existe
+      return []; // Directory does not exist
     }
 
     let entries;
     try {
       entries = this.fs.readDir(targetDirPath, cwd);
     } catch (e) {
-      return []; // Error de lectura
+      return []; // Read error
     }
 
-    // 3. Filtrar y formatear
+    // 3. Filter and format candidates
     return entries
       .filter(name => name.startsWith(searchTerm))
       .map(name => {
+        // Path prefix to prepend to the entry name (e.g., 'path/to/')
         const prefix = hasSlash ? (token.slice(0, lastSlash + 1)) : '';
 
-        // MODIFICACIÓN 2/2: Verificar si la entrada es un directorio
+        // Get the full path for the current entry to check its type
         const fullPath = this.fs.resolvePath(`${targetDirPath}/${name}`, cwd).join('/');
 
         let isDir = false;
         try {
+          // Check if the entry is a directory
           isDir = this.fs.stat(fullPath, '/').type === 'directory';
         } catch (e) {
-          // Si stat falla, asumimos que no es un directorio (o es un archivo huérfano, etc.)
+          // If stat fails, assume it's not a directory
         }
 
-        // Retornamos la parte que completa al token original
+        // Return the completion string: prefix + name + suffix ('/' for dir, ' ' for file)
         return prefix + name + (isDir ? '/' : ' ');
       });
   }
