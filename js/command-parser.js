@@ -4,23 +4,12 @@ const DEFAULT_FD_STDOUT = 1;
 const DEFAULT_FD_STDIN = 0;
 
 /**
- * Class to split a complete command line into individual commands
- * based only on the pipe operator '|'.
- * NOTE: Redirection tokens (>, <, etc.) are left INSIDE
- * each command string for the second parsing phase.
+ * @param {string} input - The full command line (e.g: "ls -l | grep file > out.txt")
+ * @returns {Array<string>} An array of individual command strings.
  */
-export class PipelineParser {
-  /**
-   * @param {string} input - The full command line (e.g: "ls -l | grep file > out.txt")
-   * @returns {Array<string>} An array of individual command strings.
-   */
-  static parse(input) {
-    // Split by the pipe operator, allowing optional whitespace around it.
-    const commands = input.split(/\s*\|\s*/);
-
-    // Trim whitespace and filter out empty strings
-    return commands.map(cmd => cmd.trim()).filter(cmd => cmd.length > 0);
-  }
+export function parsePipeline(input) {
+  const commands = input.split(/\s*\|\s*/);
+  return commands.map(cmd => cmd.trim()).filter(cmd => cmd.length > 0);
 }
 
 /**
@@ -37,7 +26,7 @@ export class RedirectionResolver {
   static #extractRedirections(commandStr) {
     // Regex to capture:
     // 1. Optional FD: (\d*)
-    // 2. Operator: (>|>>|<|<>)
+    // 2. Operator: (<>|>>|>|<)
     // 3. Target (can be &FD or a path): (&?\S+)
     const REDIRECT_REGEX = /(\d*)(<>|>>|>|<)\s*(&?\S+)/g;
 

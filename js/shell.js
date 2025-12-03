@@ -1,7 +1,7 @@
 import { Formatter } from './formatter.js';
 import { AutocompletionHandler } from './autocompletion.js';
 import { SimpleSyncStream } from './stream.js';
-import { PipelineParser, RedirectionResolver } from './command-parser.js';
+import { parsePipeline, RedirectionResolver } from './command-parser.js';
 
 /**
  * Shell class to manage the command execution environment,
@@ -103,7 +103,7 @@ export class Shell {
    * @returns {{code: number}} The exit code of the last command executed.
    */
   #executePipeline(fullCommandLine, finalDestinations) {
-    const commandStrings = PipelineParser.parse(fullCommandLine);
+    const commandStrings = parsePipeline(fullCommandLine);
 
     let pipeData = ''; // Data flowing from the previous command's stdout to the next command's stdin
     let lastExitCode = 0;
