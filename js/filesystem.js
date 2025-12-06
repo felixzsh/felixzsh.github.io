@@ -192,8 +192,8 @@ export class FileSystem extends EventTarget {
     const segments = this.resolvePath(path, cwd);
     const node = this.getNode(segments);
 
-    if (!node) throw new Error(`cat: ${path}: No such file or directory`);
-    if (node.type === 'directory') throw new Error(`cat: ${path}: Is a directory`);
+    if (!node) throw new Error(`fs: ${path}: No such file or directory`);
+    if (node.type === 'directory') throw new Error(`fs: ${path}: Is a directory`);
 
     return node.content;
   }
